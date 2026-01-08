@@ -223,9 +223,10 @@ def train_one_epoch(model, criterion, optimizer, data_loader, lr_scheduler, epoc
         if bert_model is not None:
             del last_hidden_states, embedding
 
-        gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+        if i % 500 == 0:
+            gc.collect()
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
 
         if args.local_rank == 0:
             wandb.log({
