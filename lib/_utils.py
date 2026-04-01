@@ -26,22 +26,17 @@ class _LAVTSimpleDecode(nn.Module):
         self.backbone = backbone
         self.classifier = classifier
 
-    def forward(self, x, l_feats, l_mask):
+    def forward(self, x, l_feats, l_mask, modal=None):
         input_shape = x.shape[-2:]
-
-        # features = self.backbone(x, l_feats, l_mask)
-        features, moe_loss = self.backbone(x, l_feats, l_mask)
-
+        if modal is not None and hasattr(self.backbone, "set_modal"):
+            self.backbone.set_modal(modal)
+        features = self.backbone(x, l_feats, l_mask)
         x_c1, x_c2, x_c3, x_c4 = features
 
         x = self.classifier(x_c4, x_c3, x_c2, x_c1)
         x = F.interpolate(x, size=input_shape, mode='bilinear', align_corners=True)
 
-        # return x
-        return {
-            "pred_masks": x,
-            "moe_loss": moe_loss
-        }
+        return x
 
 
 class LAVT(_LAVTSimpleDecode):
@@ -59,27 +54,20 @@ class _LAVTOneSimpleDecode(nn.Module):
         self.text_encoder = BertModel.from_pretrained(args.ck_bert)
         self.text_encoder.pooler = None
 
-    def forward(self, x, text, l_mask):
+    def forward(self, x, text, l_mask, modal=None):
         input_shape = x.shape[-2:]
         ### language inference ###
         l_feats = self.text_encoder(text, attention_mask=l_mask)[0]  # (6, 10, 768)
         l_feats = l_feats.permute(0, 2, 1)  # (B, 768, N_l)
         l_mask = l_mask.unsqueeze(dim=-1)  # (batch, N_l, 1)
         ##########################
-
-        # moe 修改
-        # features = self.backbone(x, l_feats, l_mask)
-        features, moe_loss = self.backbone(x, l_feats, l_mask)
-
+        if modal is not None and hasattr(self.backbone, "set_modal"):
+            self.backbone.set_modal(modal)
+        features = self.backbone(x, l_feats, l_mask)
         x_c1, x_c2, x_c3, x_c4  = features   # e.g. x_c1:[B, 128, 120, 120], x_c2:[B, 256, 60, 60], x_c3:[B, 512, 30, 30], x_c4:[B, 1024, 15, 15]
         x = self.classifier(x_c4, x_c3, x_c2, x_c1)
         x = F.interpolate(x, size=input_shape, mode='bilinear', align_corners=True)
-
-        # return x
-        return {
-            "pred_masks": x,
-            "moe_loss": moe_loss
-        }
+        return x
 
 
 class LAVTOne(_LAVTOneSimpleDecode):  #change

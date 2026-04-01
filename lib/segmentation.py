@@ -48,17 +48,21 @@ def _segm_lavt(pretrained, args):
                                          ape=False, drop_path_rate=0.3, patch_norm=True,
                                          out_indices=out_indices,
                                          use_checkpoint=False, num_heads_fusion=mha,
-                                         fusion_drop=args.fusion_drop,
-
-                                         # moe
-                                         moe_block_indexes=[[],[0],[i*2 for i in range(9)],[0]], 
-                                         squads=[],
-                                         top_k=2,
-                                         num_experts=8
+                                         fusion_drop=args.fusion_drop
                                          )
     if pretrained:
         print('Initializing Multi-modal Swin Transformer weights from ' + pretrained)
         backbone.init_weights(pretrained=pretrained)
+
+        if getattr(args, "use_modal_lora", False):
+            backbone.enable_modal_lora(
+                r=args.lora_r,
+                alpha=args.lora_alpha,
+                dropout=args.lora_dropout,
+                target_names=("qkv", "proj", "fc1", "fc2"),
+                freeze_base=True
+            )
+            print(f"[LoRA] Enabled modal hard-gated LoRA: r={args.lora_r}, alpha={args.lora_alpha}, drop={args.lora_dropout}")
     else:
         print('Randomly initialize Multi-modal Swin Transformer weights.')
         backbone.init_weights()
@@ -124,16 +128,22 @@ def _segm_lavt_one(pretrained, args):
                                          out_indices=out_indices,
                                          use_checkpoint=False, num_heads_fusion=mha,
                                          fusion_drop=args.fusion_drop,
-                                        
-                                         # moe
-                                         moe_block_indexes=[[],[0],[i*2 for i in range(9)],[0]], 
-                                         squads=[],
-                                         top_k=2,
-                                         num_experts=8
+                                         # frozen_stages=args.frozen_stages,
+                                         # only_fusion=args.only_fusion,
                                          )
     if pretrained:
         print('Initializing Multi-modal Swin Transformer weights from ' + pretrained)
         backbone.init_weights(pretrained=pretrained)
+
+        if getattr(args, "use_modal_lora", False):
+            backbone.enable_modal_lora(
+                r=args.lora_r,
+                alpha=args.lora_alpha,
+                dropout=args.lora_dropout,
+                target_names=("qkv", "proj", "fc1", "fc2"),
+                freeze_base=True
+            )
+            print(f"[LoRA] Enabled modal hard-gated LoRA: r={args.lora_r}, alpha={args.lora_alpha}, drop={args.lora_dropout}")
     else:
         print('Randomly initialize Multi-modal Swin Transformer weights.')
         backbone.init_weights()
