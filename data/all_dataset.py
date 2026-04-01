@@ -5,7 +5,7 @@ import cv2
 from PIL import Image
 import torch.utils.data as data
 import transformers
-from tqdm import tqdm 
+from tqdm import tqdm  # 导入tqdm库用于显示进度条
 
 import pickle
 import numpy as np
@@ -43,8 +43,8 @@ class All_Dataset(data.Dataset):
         self.instances_path=args.instances_path
         self.tokenizer = transformers.BertTokenizer.from_pretrained('bert-base-uncased')
 
-        self.maskToSentence,self.maskToimageName,self.maskTosplit,self.maskToCategory,self.maskToDecodedRLE,self.masktoArea,self.list_mask,self.maskToModal = self.load_captions()
-
+        # 【新增模态信息】
+        self.maskToSentence,self.maskToimageName,self.maskTosplit,self.maskToCategory,self.maskToDecodedRLE,self.masktoArea,self.list_mask, self.maskToModal = self.load_captions()
         self.refToInput,self.refToAttention,self.refToExist=self.get_sent_embeddings()
         if logger:
             logger.info(f"=> loaded successfully '{args.dataset}', split by {args.splitBy}, split {split}")
@@ -58,21 +58,21 @@ class All_Dataset(data.Dataset):
         masktoRLE={}
         masktoArea={}
         maskToDecodedRLE={}
+        # 【新增模态信息】
+        maskToModal = {}
         list_mask=[]
-        maskToModal={}
-
         with open(self.ref_file, 'rb') as f:
             data = pickle.load(f)
-            total_lines = len(data) 
-            pbar = tqdm(data, desc="Loading captions", total=total_lines)
+            total_lines = len(data)  # 获取总数据行数，用于进度条
+            pbar = tqdm(data, desc="Loading captions", total=total_lines)  # 创建进度条对象
             for line in pbar:
                 split_line = line["split"]
                 ann_id = line["ann_id"]
                 img_name = line["file_name"]
                 img_id = line["image_id"]
                 category_id = line["category_id"]
-                # 【新增】
-                modal = line["modal"]
+                # 【新增模态信息】
+                modal = line.get("modal", "unknown")
 
                 if split_line == self.split :
                     list_mask.append(ann_id)
@@ -81,32 +81,35 @@ class All_Dataset(data.Dataset):
                     maskToimageName[ann_id]=img_name
                     maskTosplit[ann_id]=split_line
                     maskToCategory[ann_id]=category_id
-                    maskToModal[ann_id]=modal
+                    # 【新增模态信息】
+                    maskToModal[ann_id] = modal
 
                 # Only load the ann_id of the corresponding training set/validation set/test set.
-            pbar.close()  
+            pbar.close()  # 关闭进度条
         with open(self.instances_path, 'r') as fi:
             data_json = json.load(fi)
             annotations = data_json['annotations']
-            total_annotations = len(annotations) 
-            pbar = tqdm(annotations, desc="Loading instance data", total=total_annotations) 
+            total_annotations = len(annotations)  # 获取总注释数量，用于进度条
+            pbar = tqdm(annotations, desc="Loading instance data", total=total_annotations)  # 创建进度条对象
             for data in pbar:
                 ann_id = data["id"]
 
                 rle = data['segmentation']
-                # decoded_mask = mask.decode(rle)
+                # decoded_mask = mask.decode(rle)  # 假设mask.decode是解码RLE的函数
                 maskToDecodedRLE[ann_id] = rle
 
                 masktoArea[ann_id] = data['area']
-            pbar.close()
-
+            pbar.close()  # 关闭进度条
+        
+        # 【新增模态信息】
         return maskToSentence,maskToimageName,maskTosplit,maskToCategory,maskToDecodedRLE,masktoArea,list_mask,maskToModal
+
     def get_sent_embeddings(self):
         refToInput={}
         refToAttention={}
         refToExist={}
-        total_mask_ids = len(self.list_mask) 
-        pbar = tqdm(self.list_mask, desc="Generating sentence embeddings", total=total_mask_ids)
+        total_mask_ids = len(self.list_mask)  # 获取mask_id的总数，用于进度条
+        pbar = tqdm(self.list_mask, desc="Generating sentence embeddings", total=total_mask_ids)  # 创建进度条对象
         for mask_id in pbar:
             attention_mask = [0] * self.max_tokens
             padded_input_id = [0] * self.max_tokens
@@ -123,7 +126,7 @@ class All_Dataset(data.Dataset):
             refToInput[mask_id]=input_id
             refToAttention[mask_id]=attention_mask
             refToExist[mask_id]=exist
-        pbar.close() 
+        pbar.close()  # 关闭进度条
         return refToInput,refToAttention,refToExist
     def get_exist(self, ref, sent_index):
         if "exist" in ref["sentences"][sent_index].keys():
@@ -138,14 +141,13 @@ class All_Dataset(data.Dataset):
     def __getitem__(self, index):
         mask_id=self.list_mask[index]
         img_name = self.maskToimageName[mask_id]
-
-        modal = self.maskToModal[mask_id]
         # ref=self.maskToSentence[mask_id]
         # split=self.maskTosplit[mask_id]
         try:
             img = Image.open(os.path.join(self.image_path, img_name)).convert("RGB")
         except (OSError, ValueError) as e:  
             # print(f"Error loading image {img_name}: {e}")  
+            # 尝试更换扩展名  
             if img_name.lower().endswith('.png'):  
                 new_img_name = img_name[:-4] + '.jpg'  # 替换为 .jpg 
                 img = Image.open(os.path.join(self.image_path, new_img_name)).convert("RGB") 
@@ -157,7 +159,7 @@ class All_Dataset(data.Dataset):
                 return None  
 
         rle = self.maskToDecodedRLE[mask_id]
-        m = mask.decode(rle)  # 假设mask.decode是解码RLE的函数
+        m = mask.decode(rle) 
 
         m = np.sum(m, axis=2)  # sometimes there are multiple binary map (corresponding to multiple segs)
         ref_mask = m.astype(np.uint8)  # convert to np.uint8
@@ -174,6 +176,9 @@ class All_Dataset(data.Dataset):
         attention_mask=self.refToAttention[mask_id]
         exist=self.refToExist[mask_id]
 
+        # 【新增模态信息】
+        modal = self.maskToModal[mask_id]
+
         if self.image_transforms is not None:
             # involves transform from PIL to tensor and mean and std normalization
             img, target = self.image_transforms(img, annot)
@@ -186,7 +191,7 @@ class All_Dataset(data.Dataset):
 
             exist=exist.unsqueeze(1)
 
-
+        # 【新增模态信息】
         return img, target, tensor_embeddings, attention_mask, exist, modal
 
 # from dataset.transform import get_transform
