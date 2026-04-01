@@ -3,8 +3,8 @@ import os
 import time
 import torch
 import torch.utils.data
-import wandb
-wandb.login(key='your wandb key')
+import swanlab
+swanlab.login(api_key='fvHEgPt2nOueccBWkJFtl')
 import cv2
 import random
 import transforms as T
@@ -16,7 +16,6 @@ from functools import reduce
 from bert.modeling_bert import BertModel
 from lib import segmentation
 from loss.loss import Loss
-
 
 def seed_everything(seed=2401):
     random.seed(seed)
@@ -73,24 +72,31 @@ def evaluate(model, data_loader, bert_model, epoch):
     model.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = "Test: "
-    total_its = 0 
-    
-    stats = {
-        'All': {'loss': 0.0, 'count': 0, 'cum_I': 0.0, 'cum_U': 0.0, 'iou_list': []},
-        'rgb': {'loss': 0.0, 'count': 0, 'cum_I': 0.0, 'cum_U': 0.0, 'iou_list': []},
-        'sar': {'loss': 0.0, 'count': 0, 'cum_I': 0.0, 'cum_U': 0.0, 'iou_list': []}
-    }
 
+    cum_I, cum_U = 0, 0 
+    cum_I_rgb, cum_U_rgb = 0, 0
+    cum_I_sar, cum_U_sar = 0, 0
+    
     eval_seg_iou_list = [.5, .6, .7, .8, .9]
     seg_correct = np.zeros(len(eval_seg_iou_list), dtype=np.int32)
     seg_total = 0
+    mean_IoU = []
+    total_loss = 0
+    total_its = 0
 
     with torch.no_grad():
         for data in metric_logger.log_every(data_loader, 100, header):
             total_its += 1
             image, target, sentences, attentions, exist, modal = data
-            current_modal = modal[0] 
-            
+            # convert modal to tensor int {0,1}
+            if isinstance(modal, (list, tuple)):
+                if len(modal) > 0 and isinstance(modal[0], str):
+                    modal = [1 if ("sar" in m.lower()) else 0 for m in modal]
+            else:
+                if isinstance(modal, str):
+                    modal = 1 if ("sar" in modal.lower()) else 0
+            modal = torch.as_tensor(modal, dtype=torch.long, device=image.device)
+            pixels = cv2.countNonZero(target.data.numpy()[0]) / 230400.
             image, target, sentences, attentions = image.cuda(non_blocking=True),\
                                                    target.cuda(non_blocking=True),\
                                                    sentences.cuda(non_blocking=True),\
@@ -101,68 +107,88 @@ def evaluate(model, data_loader, bert_model, epoch):
 
             if bert_model is not None:
                 last_hidden_states = bert_model(sentences, attention_mask=attentions)[0]
-                embedding = last_hidden_states.permute(0, 2, 1)
-                attentions = attentions.unsqueeze(dim=-1)
-                output = model(image, embedding, l_mask=attentions)
+                embedding = last_hidden_states.permute(0, 2, 1)  # (B, 768, N_l) to make Conv1d happy
+                attentions = attentions.unsqueeze(dim=-1)  # (B, N_l, 1)
+                output = model(image, embedding, l_mask=attentions, modal=modal)
             else:
-                output = model(image, sentences, l_mask=attentions)
+                output = model(image, sentences, l_mask=attentions, modal=modal)
 
-            loss = criterion(output['pred_masks'], target)
-            loss_val = loss.item()
+            loss = criterion(output, target)
+            total_loss += loss.item()
 
-            iou, I, U = IoU(output['pred_masks'], target) 
+            preds = output.argmax(1)
             
-            stats['All']['loss'] += loss_val
-            stats['All']['count'] += 1
-            stats['All']['cum_I'] += I
-            stats['All']['cum_U'] += U
-            stats['All']['iou_list'].append(iou)
-
-            key = current_modal.lower() 
-            if key not in stats:
-                stats[key] = {'loss': 0.0, 'count': 0, 'cum_I': 0.0, 'cum_U': 0.0, 'iou_list': []}
+            current_batch_size = preds.size(0)
             
-            stats[key]['loss'] += loss_val
-            stats[key]['count'] += 1
-            stats[key]['cum_I'] += I
-            stats[key]['cum_U'] += U
-            stats[key]['iou_list'].append(iou)
+            for b in range(current_batch_size):
+                pred_sample = preds[b]   
+                gt_sample = target[b]   
+                modal_sample = modal[b] 
+                
+                intersection = torch.sum(pred_sample * gt_sample).item()
 
-            for n_eval_iou in range(len(eval_seg_iou_list)):
-                eval_seg_iou = eval_seg_iou_list[n_eval_iou]
-                seg_correct[n_eval_iou] += (iou >= eval_seg_iou)
-            seg_total += 1
+                union = torch.sum(pred_sample) + torch.sum(gt_sample) - intersection
+                union = union.item()
 
-    print(f"\n[Epoch {epoch} Evaluation Results]")
-    log_dict = {}
+                if union == 0:
+
+                    sample_iou = 0.0
+                else:
+                    sample_iou = float(intersection) / float(union)
+                
+                mean_IoU.append(sample_iou)
+                
+                cum_I += intersection
+                cum_U += union
+                
+                modal_str = str(modal_sample).lower().strip()
+
+                modal_id = int(modal_sample.item())
+                
+                if modal_id == 0:
+                    cum_I_rgb += intersection
+                    cum_U_rgb += union
+                else:
+                    cum_I_sar += intersection
+                    cum_U_sar += union
+                
+                # 统计 Precision@k
+                for n_eval_iou in range(len(eval_seg_iou_list)):
+                    eval_seg_iou = eval_seg_iou_list[n_eval_iou]
+                    seg_correct[n_eval_iou] += (sample_iou >= eval_seg_iou)
+                
+                seg_total += 1
+
+    mean_IoU = np.array(mean_IoU)
+    mIoU = np.mean(mean_IoU) if len(mean_IoU) > 0 else 0.0
+
+    oiou_total = cum_I * 100. / cum_U if cum_U > 0 else 0.0
+    oiou_rgb = cum_I_rgb * 100. / cum_U_rgb if cum_U_rgb > 0 else 0.0
+    oiou_sar = cum_I_sar * 100. / cum_U_sar if cum_U_sar > 0 else 0.0
+
+    print('Final results:')
+    print('Mean IoU is %.2f' % (mIoU * 100.))
     
-    for key, val in stats.items():
-        if val['count'] == 0:
-            continue
-        mean_iou = np.mean(np.array(val['iou_list'])) * 100.0
-        overall_iou = (val['cum_I'] * 100.0 / val['cum_U']) if val['cum_U'] > 0 else 0.0
-        avg_loss = val['loss'] / val['count']
-        print(f"  [{key.upper()}] mIoU: {mean_iou:.2f} | oIoU: {overall_iou:.2f} | Loss: {avg_loss:.4f} (Samples: {val['count']})")
-        
-        log_dict[f"Val/{key}_mIoU"] = mean_iou
-        log_dict[f"Val/{key}_oIoU"] = overall_iou
-        log_dict[f"Val/{key}_Loss"] = avg_loss
-
-    print("  Precision@k (Overall):")
+    results_str = ''
     for n_eval_iou in range(len(eval_seg_iou_list)):
-        print('    precision@%s = %.2f' % \
-               (str(eval_seg_iou_list[n_eval_iou]), seg_correct[n_eval_iou] * 100. / seg_total))
+        results_str += '    precision@%s = %.2f\n' % \
+                       (str(eval_seg_iou_list[n_eval_iou]), seg_correct[n_eval_iou] * 100. / seg_total)
     
-    if args.local_rank == 0:
-        wandb.log(log_dict)
+    results_str += '    Overall IoU (Total): %.2f\n' % oiou_total
+    results_str += '    Overall IoU (RGB)  : %.2f\n' % oiou_rgb
+    results_str += '    Overall IoU (SAR)  : %.2f\n' % oiou_sar
+    print(results_str)
 
-    final_mIoU = np.mean(np.array(stats['All']['iou_list'])) * 100.0
-    if stats['All']['cum_U'] > 0:
-        final_oIoU = (stats['All']['cum_I'] * 100.0 / stats['All']['cum_U'])
-    else:
-        final_oIoU = 0.0
-    print('Overall IoU = %.2f\n' % final_oIoU)
-    return final_mIoU, final_oIoU
+    if args.local_rank == 0:
+        swanlab.log({
+            "val mIoU": mIoU * 100., 
+            "val oiou": oiou_total,
+            "val oiou_rgb": oiou_rgb,
+            "val oiou_sar": oiou_sar,
+            "val Loss": total_loss / total_its
+        })
+
+    return mIoU * 100., oiou_total
 
 
 def train_one_epoch(model, criterion, optimizer, data_loader, lr_scheduler, epoch, print_freq,
@@ -170,18 +196,23 @@ def train_one_epoch(model, criterion, optimizer, data_loader, lr_scheduler, epoc
     model.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value}'))
-
-    metric_logger.add_meter('aux_loss', utils.SmoothedValue(window_size=20, fmt='{value:.4f}'))
-
     header = 'Epoch: [{}]'.format(epoch)
     train_loss = 0
-    total_aux_loss = 0 
     total_its = 0
 
     # for data in data_loader:
     for i, data in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         total_its += 1
         image, target, sentences, attentions, exist, modal = data
+        # convert modal to tensor int {0,1}
+        if isinstance(modal, (list, tuple)):
+            if len(modal) > 0 and isinstance(modal[0], str):
+                modal = [1 if ("sar" in m.lower()) else 0 for m in modal]
+        else:
+            if isinstance(modal, str):
+                modal = 1 if ("sar" in modal.lower()) else 0
+        modal = torch.as_tensor(modal, dtype=torch.long, device=image.device)
+
         image, target, sentences, attentions = image.cuda(non_blocking=True),\
                                                target.cuda(non_blocking=True),\
                                                sentences.cuda(non_blocking=True),\
@@ -192,58 +223,44 @@ def train_one_epoch(model, criterion, optimizer, data_loader, lr_scheduler, epoc
 
         if bert_model is not None:
 
-            last_hidden_states = bert_model(sentences, attention_mask=attentions)[0]
-            embedding = last_hidden_states.permute(0, 2, 1) 
-            attentions = attentions.unsqueeze(dim=-1)
-            output = model(image, embedding, attentions)
+            last_hidden_states = bert_model(sentences, attention_mask=attentions)[0]  # (6, 10, 768)
+            embedding = last_hidden_states.permute(0, 2, 1)  # (B, 768, N_l) to make Conv1d happy
+            attentions = attentions.unsqueeze(dim=-1)  # (batch, N_l, 1)
+            output = model(image, embedding, attentions, modal=modal)#, sentences_hidden_state)# [4,2,120,120]
         else:
-            output = model(image, sentences, attentions)
+            output = model(image, sentences, attentions, modal=modal)#, sentences_hidden_state)
         optimizer.zero_grad()
-        loss = criterion(output['pred_masks'], target)
+        loss = criterion(output, target)
 
-        if 'moe_loss' in output:
-            moe_loss = output['moe_loss']
-            if isinstance(moe_loss, torch.Tensor):
-                aux_loss_val = moe_loss.item()
-                loss += moe_loss
-            else:
-                aux_loss_val = moe_loss
-
-        loss.backward()    
+        loss.backward()
         optimizer.step()
         lr_scheduler.step()
 
+
         torch.cuda.synchronize()
         train_loss += loss.item()
-        total_aux_loss += aux_loss_val
         iterations += 1
-        metric_logger.update(loss=loss.item(), aux_loss=aux_loss_val, lr=optimizer.param_groups[0]["lr"])
+        metric_logger.update(loss=loss.item(), lr=optimizer.param_groups[0]["lr"])
 
         del image, target, sentences, attentions, loss, output, data
         if bert_model is not None:
             del last_hidden_states, embedding
 
-        if i % 500 == 0:
-            gc.collect()
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
+        # gc.collect()
+        # torch.cuda.empty_cache()
+        # torch.cuda.synchronize()
 
-        if args.local_rank == 0:
-            wandb.log({
-                "Train Loss": train_loss / total_its
-            })
+    if args.local_rank == 0:
+        swanlab.log({
+            "Train Loss": train_loss / total_its,})
 
 
 def main(args):
-
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir, exist_ok=True)
-
     dataset, num_classes = get_dataset("train",
                                        get_transform(args=args),
                                        args=args, eval=False)
 
-    dataset_test, _ = get_dataset("val",
+    dataset_test, _ = get_dataset("test",
                                   get_transform(args=args),
                                   args=args, eval=True)
     
@@ -265,6 +282,7 @@ def main(args):
     data_loader_test = torch.utils.data.DataLoader(
         dataset_test, batch_size=1, sampler=test_sampler, num_workers=args.workers)
 
+    # model initialization
     print(args.model)
     model = segmentation.__dict__[args.model](pretrained=args.pretrained_swin_weights,
                                               args=args)
@@ -300,6 +318,8 @@ def main(args):
     backbone_no_decay = list()
     backbone_decay = list()
     for name, m in single_model.backbone.named_parameters():
+        if not m.requires_grad:
+            continue
         if 'norm' in name or 'absolute_pos_embed' in name or 'relative_position_bias_table' in name:
             backbone_no_decay.append(m)
         else:
@@ -352,8 +372,9 @@ def main(args):
         resume_epoch = -999
 
     # training loops
-    if args.local_rank == 0:
-        wandb.watch(model, log="all")
+    # if args.local_rank == 0:
+    #     swanlab.watch(model, log="all")
+
 
     for epoch in range(max(0, resume_epoch+1), args.epochs):
     # for epoch in range(0, args.epochs):
@@ -380,8 +401,8 @@ def main(args):
             best_oIoU = overallIoU
         utils.save_on_master(dict_to_save, os.path.join(args.output_dir,
                                                         'model_last_{}.pth'.format(args.model_id)))
-        if args.local_rank == 0:
-            wandb.save('model.h5')
+        # if args.local_rank == 0:
+        #     swanlab.save('model.h5')
 
     # summarize
     total_time = time.time() - start_time
@@ -395,7 +416,7 @@ if __name__ == "__main__":
     parser = get_parser()
     args = parser.parse_args()
     if args.local_rank == 0:
-        wandb.init(project="RemoteSAM-PlusPlus")
+        swanlab.init(project="remotesam_sar_toy_experiment_2000")
     # set up distributed learning
     utils.init_distributed_mode(args)
     print('Image size: {}'.format(str(args.img_size)))

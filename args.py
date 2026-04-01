@@ -2,12 +2,10 @@ import argparse
 
 
 def get_parser():
-    parser = argparse.ArgumentParser(description='RemoteSAM-PlusPlus training and testing')
+    parser = argparse.ArgumentParser(description='RemoteSAM training and testing')
     parser.add_argument('--amsgrad', action='store_true',
                         help='if true, set amsgrad to True in an Adam or AdamW optimizer.')
-    
     parser.add_argument('-b', '--batch-size', default=2, type=int)
-
     parser.add_argument('--bert_tokenizer', default='bert-base-uncased', help='BERT tokenizer')
     parser.add_argument('--ck_bert', default='bert-base-uncased', help='pre-trained BERT weights')
     parser.add_argument('--dataset', default='rrsisd', help='dataset name')
@@ -19,14 +17,12 @@ def get_parser():
     parser.add_argument('--fusion_drop', default=0.0, type=float, help='dropout rate for PWAMs')
     parser.add_argument('--img_size', default=896, type=int, help='input image size')
     parser.add_argument("--local_rank", type=int,default=0,help='local rank for DistributedDataParallel')
-
     parser.add_argument('--lr', default=0.00003, type=float, help='the initial learning rate') # 0.00003
-
     parser.add_argument('--mha', default='', help='If specified, should be in the format of a-b-c-d, e.g., 4-4-4-4,'
                                                   'where a, b, c, and d refer to the numbers of heads in stage-1,'
                                                   'stage-2, stage-3, and stage-4 PWAMs')
     parser.add_argument('--model', default='lavt_one', help='model: lavt, lavt_one')
-    parser.add_argument('--model_id', default='RemoteSAM-PlusPlus', help='name to identify the model')
+    parser.add_argument('--model_id', default='RemoteSAM', help='name to identify the model')
     parser.add_argument('--output-dir', default='./checkpoints/', help='path where to save checkpoint weights')
     parser.add_argument('--pin_mem', action='store_true',
                         help='If true, pin memory when using the data loader.')
@@ -34,9 +30,7 @@ def get_parser():
                         help='path to pre-trained Swin backbone weights')
     parser.add_argument('--print-freq', default=10, type=int, help='print frequency')
     parser.add_argument('--refer_data_root', default='/data/dishimin/RemoteSAM-270K', help='REFER dataset root directory')
-
     parser.add_argument('--resume', default='', help='resume from checkpoint')
-
     parser.add_argument('--split', default='test', help='only used when testing')
     parser.add_argument('--splitBy', default='unc', help='change to umd or google when the datasset is G-Ref (RefCOCOg)')
     parser.add_argument('--swin_type', default='base',
@@ -48,23 +42,26 @@ def get_parser():
                              'when training, window size is inferred from pre-trained weights file name'
                              '(containing \'window12\'). Initialize Swin with window size 12 instead of the default 7.')
     parser.add_argument('-j', '--workers', default=8, type=int, metavar='N', help='number of data loading workers')
-
-    parser.add_argument("--imageFolder", default='/data/RemoteSAM-270K/JPEGImages/', type=str, 
+    parser.add_argument("--imageFolder", default='/data/user2/RemoteSAM_SAR_520K/images', type=str, 
                         help="imageFolder path")
-    parser.add_argument("--ref_file_path", default='/data/RemoteSAM-270K/refs(unc)_RemoteSAM.p', type=str, 
+    parser.add_argument("--ref_file_path", default='/data/user2/RemoteSAM_SAR_520K/refs(unc).p', type=str, 
                         help="ref_file_path")
-    parser.add_argument("--instances_path", default='/data/RemoteSAM-270K/instances.json', type=str, 
+    parser.add_argument("--instances_path", default='/data/user2/RemoteSAM_SAR_520K/instances.json', type=str, 
                         help="instances.json's path")
-    
     parser.add_argument("--eval", action="store_true", help="Only run evaluation")
     parser.add_argument('--EPOC', action='store_true', help='if true, use EPOC')
     parser.add_argument('--save_path', default='', help='save_path')
-
     parser.add_argument('--task', type=str, choices=['CNT', 'DET', 'CAP', 'VG', 'MCC', 'MLC','SEG','REF'], 
                         help='For tasks other than referring segmentation and semantic segmentation, specify the task')
     parser.add_argument('--annoFolder', default='/data/dishimin/iSAID/rrsisd/Annotations/', type=str, help="annoFolder path")
     parser.add_argument('--sentence', default='', help='sentence input')
     parser.add_argument('--_class', default='', help='class input')
+
+    # modal hard-gated LoRA
+    parser.add_argument('--use_modal_lora', action='store_true', help='Enable hard-gated dual LoRA for RGB/SAR')
+    parser.add_argument('--lora_r', default=8, type=int, help='LoRA rank')
+    parser.add_argument('--lora_alpha', default=16.0, type=float, help='LoRA alpha')
+    parser.add_argument('--lora_dropout', default=0.05, type=float, help='LoRA dropout')
 
     return parser
 
