@@ -4,7 +4,7 @@ import time
 import torch
 import torch.utils.data
 import swanlab
-swanlab.login(api_key='fvHEgPt2nOueccBWkJFtl')
+swanlab.login(api_key='')
 import cv2
 import random
 import transforms as T
@@ -260,7 +260,7 @@ def main(args):
                                        get_transform(args=args),
                                        args=args, eval=False)
 
-    dataset_test, _ = get_dataset("test",
+    dataset_test, _ = get_dataset("val",
                                   get_transform(args=args),
                                   args=args, eval=True)
     
@@ -416,7 +416,7 @@ if __name__ == "__main__":
     parser = get_parser()
     args = parser.parse_args()
     if args.local_rank == 0:
-        swanlab.init(project="remotesam_sar_toy_experiment_2000")
+        swanlab.init(project="RemoteSAM++")
     # set up distributed learning
     utils.init_distributed_mode(args)
     print('Image size: {}'.format(str(args.img_size)))
