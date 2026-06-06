@@ -7,39 +7,51 @@ import torch
 import torchvision
 import numpy as np
 import utils
+
+from transformers_compat import patch_optional_sklearn
+
+patch_optional_sklearn()
 import transformers
 from lib import segmentation
 import transforms as T
 from PIL import Image
 from .RuleBasedCaptioning import single_captioning
+from .runtime import modal_to_id
 
 
-def get_transform():
+def get_transform(img_size=896):
     transforms = [
-                  T.Resize(896, 896),
+                  T.Resize(img_size, img_size),
                   T.ToTensor(),
                   T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                   ]
     return T.Compose(transforms)
 
 
-def embed_sentences(sentences, max_tokens=20):
-    # init
-    bert_model = transformers.BertTokenizer.from_pretrained('bert-base-uncased')
+def build_tokenizer(args=None):
+    text_encoder = getattr(args, "text_encoder", "modernbert") if args is not None else "modernbert"
+    if text_encoder == "modernbert":
+        tokenizer_path = getattr(args, "modernbert_path", "./gte-modernbert-base") if args is not None else "./gte-modernbert-base"
+    else:
+        tokenizer_path = getattr(args, "bert_tokenizer", "./bert-base-uncased") if args is not None else "./bert-base-uncased"
+    return transformers.AutoTokenizer.from_pretrained(tokenizer_path, local_files_only=True)
+
+
+def embed_sentences(sentences, tokenizer, max_tokens=20):
     inputs = []
     attentions = []
 
     for sentence in sentences:
-        sentence_tokenized = bert_model.encode(text=sentence, add_special_tokens=True)
-        sentence_tokenized = sentence_tokenized[:max_tokens]  
-        # pad the tokenized sentence
-        padded_sent_toks = [0] * max_tokens
-        padded_sent_toks[:len(sentence_tokenized)] = sentence_tokenized
-        # create a sentence token mask: 1 for real words; 0 for padded tokens
-        attention_mask = [0] * max_tokens
-        attention_mask[:len(sentence_tokenized)] = [1]*len(sentence_tokenized)
-        inputs.append([padded_sent_toks])
-        attentions.append([attention_mask])
+        encoded = tokenizer(
+            sentence,
+            add_special_tokens=True,
+            max_length=max_tokens,
+            padding="max_length",
+            truncation=True,
+            return_attention_mask=True,
+        )
+        inputs.append([encoded["input_ids"]])
+        attentions.append([encoded["attention_mask"]])
     
     return torch.tensor(inputs), torch.tensor(attentions)
 
@@ -68,10 +80,30 @@ class RemoteSAM():
     GMP = torch.nn.AdaptiveMaxPool2d(1)
     GAP = torch.nn.AdaptiveAvgPool2d(1)
 
-    def __init__(self, RemoteSAM_model, device, *, use_EPOC, EPOC_threshold=0.25, MLC_balance_factor=0.5, MCC_balance_factor=1.0):
+    def __init__(
+        self,
+        RemoteSAM_model,
+        device,
+        *,
+        use_EPOC,
+        args=None,
+        modal=None,
+        text_encoder=None,
+        EPOC_threshold=0.25,
+        MLC_balance_factor=0.5,
+        MCC_balance_factor=1.0,
+    ):
         self.RemoteSAM_model = RemoteSAM_model
         self.RemoteSAM_model.eval()
-        self.device = device
+        self.text_encoder = text_encoder
+        if self.text_encoder is not None:
+            self.text_encoder.eval()
+        self.device = torch.device(device)
+        self.args = args
+        self.img_size = getattr(args, "img_size", 896) if args is not None else 896
+        self.max_tokens = getattr(args, "max_tokens", 20) if args is not None else 20
+        self.tokenizer = build_tokenizer(args)
+        self.modal = torch.tensor([modal_to_id(modal if modal is not None else getattr(args, "modal", "rgb"))], dtype=torch.long)
         self.EPOC_threshold = EPOC_threshold
         self.MLC_balance_factor = MLC_balance_factor
         self.MCC_balance_factor = MCC_balance_factor
@@ -81,6 +113,13 @@ class RemoteSAM():
             EPOC_model = transformers.AutoModelForSemanticSegmentation.from_pretrained(EPOC_checkpoint, num_labels=1, ignore_mismatched_sizes=True)
             self.EPOC_model = EPOC_model.to(device).eval()
 
+    def forward_model(self, image, inputs, attentions):
+        modal = self.modal.to(image.device)
+        if self.text_encoder is not None:
+            hidden_states = self.text_encoder(inputs, attention_mask=attentions)[0]
+            inputs = hidden_states.permute(0, 2, 1).to(dtype=image.dtype)
+            attentions = attentions.unsqueeze(-1)
+        return self.RemoteSAM_model(image, inputs, l_mask=attentions, modal=modal)
 
     def check_input(self, image, classnames):
 
@@ -103,16 +142,20 @@ class RemoteSAM():
         prob_result = {}
 
         origin_image = image
-        image, _ = get_transform()(image, image)
+        image, _ = get_transform(self.img_size)(image, image)
         image = image.unsqueeze(0).to(self.device)
 
-        inputs, attentions = embed_sentences([f"{classname} in the image" for classname in classnames])
+        inputs, attentions = embed_sentences(
+            [f"{classname} in the image" for classname in classnames],
+            self.tokenizer,
+            self.max_tokens,
+        )
         inputs = inputs.to(self.device)
         attentions = attentions.to(self.device)
 
         for j in range(inputs.shape[0]):
 
-            output = self.RemoteSAM_model(image, inputs[j], l_mask=attentions[j])
+            output = self.forward_model(image, inputs[j], attentions[j])
 
             mask = output.cpu().argmax(1, keepdim=True)  # (1, 1, resized_shape)
             mask = torch.nn.functional.interpolate(mask.float(), origin_image.size[::-1])  # (1, 1, origin_shape)
@@ -136,14 +179,14 @@ class RemoteSAM():
         assert len(sentence)==1
 
         origin_image = image
-        image, _ = get_transform()(image, image)
+        image, _ = get_transform(self.img_size)(image, image)
         image = image.unsqueeze(0).to(self.device)
 
-        inputs, attentions = embed_sentences(sentence)
+        inputs, attentions = embed_sentences(sentence, self.tokenizer, self.max_tokens)
         inputs = inputs[0].to(self.device)
         attentions = attentions[0].to(self.device)
 
-        output = self.RemoteSAM_model(image, inputs, l_mask=attentions)
+        output = self.forward_model(image, inputs, attentions)
 
         mask = output.cpu().argmax(1, keepdim=True)  # (1, 1, resized_shape)
         mask = torch.nn.functional.interpolate(mask.float(), origin_image.size[::-1])  # (1, 1, origin_shape)
@@ -167,7 +210,7 @@ class RemoteSAM():
         result = {}
 
         origin_image = image
-        image, _ = get_transform()(image, image)
+        image, _ = get_transform(self.img_size)(image, image)
         image = image.unsqueeze(0).to(self.device)
 
         if self.EPOC_model:
@@ -210,16 +253,20 @@ class RemoteSAM():
         avg_result = {}
 
         origin_image = image
-        image, _ = get_transform()(image, image)
+        image, _ = get_transform(self.img_size)(image, image)
         image = image.unsqueeze(0).to(self.device)
 
-        inputs, attentions = embed_sentences([f"{classname} in the image" for classname in classnames])
+        inputs, attentions = embed_sentences(
+            [f"{classname} in the image" for classname in classnames],
+            self.tokenizer,
+            self.max_tokens,
+        )
         inputs = inputs.to(self.device)
         attentions = attentions.to(self.device)
 
         for j in range(inputs.shape[0]):
 
-            output = self.RemoteSAM_model(image, inputs[j], l_mask=attentions[j])
+            output = self.forward_model(image, inputs[j], attentions[j])
             prob = torch.softmax(output, dim=1)[:, [1], :, :]
 
             max_result[classnames[j]] = self.GMP(prob).cpu().squeeze().data.numpy()

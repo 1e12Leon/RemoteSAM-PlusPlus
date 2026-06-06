@@ -36,14 +36,13 @@ class COCO_style(torch.utils.data.Dataset):
         id2image = {}
         for item in data['images']:
             id2image[item["id"]] = item["file_name"]
+            image_name = item["file_name"]
+            image2groundtruth[image_name] = []
+            image_list.append(image_name)
+            image2id[image_name] = item["id"]
 
         for item in tqdm(data['annotations'], desc="Collecting groundtruth", total=len(data['annotations'])):
             image_name = id2image[item["image_id"]]
-            if image_name not in image2groundtruth:
-                image2groundtruth[image_name] = []
-                image_list.append(image_name)
-                image2id[image_name] = item["image_id"]
-
             if item["category_id"] == self.classes.index(self.args._class):
                 x, y, w, h = item["bbox"]
                 box = [x, y, x+w, y+h]
@@ -123,6 +122,33 @@ class DOTA_style(torch.utils.data.Dataset):
 class DIOR_DET(COCO_style):
 
     classes = ['background', 'airplane', 'airport', 'baseballfield', 'basketballcourt', 'bridge', 'chimney', 'dam', 'expressway-service-area', 'expressway-toll-station', 'golffield', 'groundtrackfield', 'harbor', 'overpass', 'ship', 'stadium', 'storagetank', 'tenniscourt', 'trainstation', 'vehicle', 'windmill']
+
+
+class SARDet_DET(COCO_style):
+
+    classes = ['ship', 'aircraft', 'car', 'tank', 'bridge', 'harbor']
+
+
+class ISAID_DET(COCO_style):
+
+    classes = [
+        'background',
+        'ship',
+        'storage_tank',
+        'baseball_diamond',
+        'tennis_court',
+        'basketball_court',
+        'Ground_Track_Field',
+        'Bridge',
+        'Large_Vehicle',
+        'Small_Vehicle',
+        'Helicopter',
+        'Swimming_pool',
+        'Roundabout',
+        'Soccer_ball_field',
+        'plane',
+        'Harbor',
+    ]
 
 
 class DOTAv2_DET(DOTA_style):

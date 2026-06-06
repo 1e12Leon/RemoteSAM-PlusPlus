@@ -19,15 +19,21 @@ def DiverseDataset(args, image_transforms=None, max_tokens=20):
             return DOTA_CNT(args, max_tokens=max_tokens)
 
     elif task == 'VG':
-        assert dataset in ['RSVG'], "dataset must be in ['RSVG'], but got {}".format(dataset)
+        assert dataset in ['RSVG', 'SARVG'], "dataset must be in ['RSVG', 'SARVG'], but got {}".format(dataset)
         if dataset == 'RSVG':
             return RSVG_VG(args, max_tokens=max_tokens)
+        elif dataset == 'SARVG':
+            return SARVG_VG(args, max_tokens=max_tokens)
 
     elif task == 'DET':
-        assert dataset in ['DIOR', 'DOTAv2', 'DOTAv1'], "dataset must be in ['DIOR', 'DOTAv2', 'DOTAv1'], but got {}".format(dataset)
+        assert dataset in ['DIOR', 'SARDet', 'ISAID', 'DOTAv2', 'DOTAv1'], "dataset must be in ['DIOR', 'SARDet', 'ISAID', 'DOTAv2', 'DOTAv1'], but got {}".format(dataset)
         if dataset == 'DIOR':
             # foo := (image_id, classindex)
             return DIOR_DET(args, max_tokens=max_tokens)
+        elif dataset == 'SARDet':
+            return SARDet_DET(args, max_tokens=max_tokens)
+        elif dataset == 'ISAID':
+            return ISAID_DET(args, max_tokens=max_tokens)
         elif dataset == 'DOTAv2':
             return DOTAv2_DET(args, max_tokens=max_tokens)
         elif dataset == 'DOTAv1':

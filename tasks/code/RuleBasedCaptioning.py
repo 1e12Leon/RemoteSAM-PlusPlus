@@ -2,8 +2,6 @@ import os
 import random
 import xml.etree.ElementTree as ET
 import json
-from .metric.cidereval.eval import CIDErEvalCap
-from pycocotools.coco import COCO
 
 def object_existence_cap(objects):
     sentence_templates = [
@@ -129,6 +127,9 @@ def merge_json(jsonpath):
 
 
 def evaluate(gtjson, predjson):
+    from .metric.cidereval.eval import CIDErEvalCap
+    from pycocotools.coco import COCO
+
     cocoGt = COCO(gtjson)
     cocoDt = cocoGt.loadRes(predjson)
     cocoeval_cap = CIDErEvalCap(cocoGt, cocoDt)

@@ -1,4 +1,7 @@
 __author__ = 'hfang'
 # edited by Michele Cafagna
 from .ptbtokenizer import PTBTokenizer
-from .simpletokenizer import SimpleTokenizer
+try:
+    from .simpletokenizer import SimpleTokenizer
+except Exception:
+    SimpleTokenizer = None

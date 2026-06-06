@@ -52,9 +52,10 @@ class DiceLoss:
 
 
 class Loss():
-    def __init__(self, weight=0.1):
+    def __init__(self, weight=0.1, device=None):
         self.dice_loss = DiceLoss()
-        self.ce_loss = torch.nn.CrossEntropyLoss(weight=torch.FloatTensor([0.9, 1.1]).cuda())
+        ce_weight = torch.tensor([0.9, 1.1], dtype=torch.float32, device=device)
+        self.ce_loss = torch.nn.CrossEntropyLoss(weight=ce_weight)
         self.weight = weight
 
     def __call__(self, pred, targ):

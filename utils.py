@@ -117,7 +117,6 @@ class MetricLogger(object):
         self.meters[name] = meter
 
     def log_every(self, iterable, print_freq, header=None):
-        print(iterable)
         i = 0
         if not header:
             header = ''
@@ -216,18 +215,29 @@ def init_distributed_mode(args):
         world_size = int(os.environ['WORLD_SIZE'])
         print(f"RANK and WORLD_SIZE in environment: {rank}/{world_size}")
     else:
-        rank = -1
-        world_size = -1
+        args.distributed = False
+        args.local_rank = 0
+        if args.output_dir:
+            mkdir(args.output_dir)
+        print("Not using distributed mode")
+        return
 
+    args.local_rank = int(os.environ.get("LOCAL_RANK", args.local_rank))
+    args.distributed = True
     torch.cuda.set_device(args.local_rank)
-    torch.distributed.init_process_group(backend='nccl', init_method='env://', world_size=world_size, rank=rank)
+    timeout = datetime.timedelta(seconds=getattr(args, "dist_timeout", 7200))
+    torch.distributed.init_process_group(
+        backend='nccl',
+        init_method='env://',
+        world_size=world_size,
+        rank=rank,
+        timeout=timeout,
+    )
     torch.distributed.barrier()
     setup_for_distributed(is_main_process())
 
     if args.output_dir:
         mkdir(args.output_dir)
-    if args.model_id:
-        mkdir(os.path.join('./models/', args.model_id))
 
 
 def M2B_wEPOC(ori_mask, new_mask, probs, area_threshold, conf_threshold, box_type):

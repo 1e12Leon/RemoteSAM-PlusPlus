@@ -1,13 +1,18 @@
-from collections import OrderedDict
-import sys
 import torch
 from torch import nn
 from torch.nn import functional as F
-from transformers import BertModel
+from .text_encoders import build_text_encoder_model, build_text_feature_adapter
+
+
+def torch_load_checkpoint(path, map_location="cpu"):
+    try:
+        return torch.load(path, map_location=map_location, weights_only=False)
+    except TypeError:
+        return torch.load(path, map_location=map_location)
 
 
 def load_weights(model, load_path):
-    dict_trained = torch.load(load_path)['model']
+    dict_trained = torch_load_checkpoint(load_path)['model']
     dict_new = model.state_dict().copy()
     for key in dict_new.keys():
         if key in dict_trained.keys():
@@ -51,14 +56,16 @@ class _LAVTOneSimpleDecode(nn.Module):
         super(_LAVTOneSimpleDecode, self).__init__()
         self.backbone = backbone
         self.classifier = classifier
-        self.text_encoder = BertModel.from_pretrained(args.ck_bert)
-        self.text_encoder.pooler = None
+        self.text_encoder = build_text_encoder_model(args)
+        self.text_adapter = build_text_feature_adapter(args)
 
     def forward(self, x, text, l_mask, modal=None):
         input_shape = x.shape[-2:]
         ### language inference ###
         l_feats = self.text_encoder(text, attention_mask=l_mask)[0]  # (6, 10, 768)
+        l_feats = self.text_adapter(l_feats)
         l_feats = l_feats.permute(0, 2, 1)  # (B, 768, N_l)
+        l_feats = l_feats.to(dtype=next(self.backbone.parameters()).dtype)
         l_mask = l_mask.unsqueeze(dim=-1)  # (batch, N_l, 1)
         ##########################
         if modal is not None and hasattr(self.backbone, "set_modal"):

@@ -1,23 +1,19 @@
+import os
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+
 import torch
 import torch.utils.data
 import utils
 import numpy as np
 import transforms as T
 import random
-from bert.modeling_bert import BertModel
-from lib import segmentation
+from tasks.code.runtime import build_ref_dataset, load_model_and_text_encoder
 
 
 def get_dataset(image_set, transform, args):
-    from data.dataset_refer_bert import ReferDataset
-    ds = ReferDataset(args,
-                      split=image_set,
-                      image_transforms=transform,
-                      target_transforms=None,
-                      eval_mode=True
-                      )
-    num_classes = 2
-    return ds, num_classes
+    return build_ref_dataset(args, image_set, transform), 2
 
 
 def evaluate(model, data_loader, bert_model, device):
@@ -35,37 +31,37 @@ def evaluate(model, data_loader, bert_model, device):
     with torch.no_grad():
 
         for data in metric_logger.log_every(data_loader, 100, header):
-            image, target, sentences, attentions = data
+            image, target, sentences, attentions, _, modal = data
             image, target, sentences, attentions = image.to(device), target.to(device), \
                                                    sentences.to(device), attentions.to(device)
             sentences = sentences.squeeze(1)
             attentions = attentions.squeeze(1)
+            modal = modal.to(device=device, dtype=torch.long).reshape(-1)
             target = target.cpu().data.numpy()
-            for j in range(sentences.size(-1)):
-                if bert_model is not None:
-                    last_hidden_states = bert_model(sentences[:, :, j], attention_mask=attentions[:, :, j])[0]
-                    embedding = last_hidden_states.permute(0, 2, 1)
-                    output = model(image, embedding, l_mask=attentions[:, :, j].unsqueeze(-1))
-                else:
-                    output = model(image, sentences[:, :, j], l_mask=attentions[:, :, j])
+            if bert_model is not None:
+                last_hidden_states = bert_model(sentences, attention_mask=attentions)[0]
+                embedding = last_hidden_states.permute(0, 2, 1).to(dtype=image.dtype)
+                output = model(image, embedding, l_mask=attentions.unsqueeze(-1), modal=modal)
+            else:
+                output = model(image, sentences, l_mask=attentions, modal=modal)
 
-                output = output.cpu()
+            output = output.cpu()
 
-                output_mask = output.argmax(1).data.numpy()
+            output_mask = output.argmax(1).data.numpy()
 
-                I, U = computeIoU(output_mask, target)
-                if U == 0:
-                    this_iou = 0.0
-                else:
-                    this_iou = I*1.0/U
-                mean_IoU.append(this_iou)
-                cum_I += I
-                cum_U += U
-                for n_eval_iou in range(len(eval_seg_iou_list)):
-                    eval_seg_iou = eval_seg_iou_list[n_eval_iou]
-                    seg_correct[n_eval_iou] += (this_iou >= eval_seg_iou)
+            I, U = computeIoU(output_mask, target)
+            if U == 0:
+                this_iou = 0.0
+            else:
+                this_iou = I*1.0/U
+            mean_IoU.append(this_iou)
+            cum_I += I
+            cum_U += U
+            for n_eval_iou in range(len(eval_seg_iou_list)):
+                eval_seg_iou = eval_seg_iou_list[n_eval_iou]
+                seg_correct[n_eval_iou] += (this_iou >= eval_seg_iou)
 
-                seg_total += 1
+            seg_total += 1
 
 
             del image, target, sentences, attentions, output,output_mask
@@ -113,26 +109,8 @@ def main(args):
     data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=1,
                                                    sampler=test_sampler, num_workers=args.workers)
     print(args.model)
-    # 3. 初始化视觉分割模型
-    single_model = segmentation.__dict__[args.model](pretrained='',args=args)
-
-    # 4. 加载预训练权重
-    # checkpoint = torch.load(args.resume, map_location='cpu', weights_only=False)
-    checkpoint = torch.load(args.resume, map_location='cpu')
-    single_model.load_state_dict(checkpoint['model'], strict=False) # 将权重加载到模型中
-    model = single_model.to(device)
-
-    # 5. 初始化文本编码器 BERT 模型
-    if args.model != 'lavt_one':
-        model_class = BertModel
-        single_bert_model = model_class.from_pretrained(args.ck_bert)
-        # work-around for a transformers bug; need to update to a newer version of transformers to remove these two lines
-        if args.ddp_trained_weights:
-            single_bert_model.pooler = None
-        single_bert_model.load_state_dict(checkpoint['bert_model'])
-        bert_model = single_bert_model.to(device)
-    else:
-        bert_model = None
+    # 3. 初始化模型并加载当前项目 checkpoint
+    model, bert_model, device = load_model_and_text_encoder(args, distributed=False)
 
     # 6. 调用评测函数
     evaluate(model, data_loader_test, bert_model, device=device)

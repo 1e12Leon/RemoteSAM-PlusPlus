@@ -1,17 +1,27 @@
 #!/bin/bash
 
 FILE="./result/CNT/CNT.log"
-: > $FILE
+mkdir -p "$(dirname "$FILE")"
+: > "$FILE"
 
-python -m torch.distributed.launch --nproc_per_node 1 --master_port 12345 \
+MODAL=${MODAL:-rgb}
+RESUME=${RESUME:-"checkpoints/model_best_mIoU_RemoteSAM_DINOv3ConvNeXtB_ModernBERT.pth"}
+IMAGE_FOLDER=${IMAGE_FOLDER:-"/data/user2/zjj/DIORcoco/JPEGImages"}
+ANNO_FOLDER=${ANNO_FOLDER:-"/data/user2/zjj/DIORcoco/Annotations/test_IMG_CT.json"}
+REF_FILE_PATH=${REF_FILE_PATH:-""}
+INSTANCES_PATH=${INSTANCES_PATH:-""}
+
+CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nproc_per_node 4 --master_port 12347 \
     ./tasks/code/eval/CNT.py \
-    --resume ./pretrained_weights/checkpoint.pth \
+    --resume "$RESUME" \
     --split test \
-    --window12 \
     --save_path "./result/CNT/" \
     --task "CNT" \
     --dataset "DIOR" \
-    --imageFolder "./refer/data/Counting/test/DIOR/Images" \
-    --annoFolder "./refer/data/Counting/test/DIOR/Annotation/test_IMG_CT.json" \
-    --EPOC \
+    --modal "$MODAL" \
+    --imageFolder "$IMAGE_FOLDER" \
+    --annoFolder "$ANNO_FOLDER" \
+    --ref_file_path "$REF_FILE_PATH" \
+    --instances_path "$INSTANCES_PATH" \
+    # --EPOC \
     2>&1 | tee -a $FILE

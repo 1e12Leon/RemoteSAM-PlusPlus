@@ -4,14 +4,13 @@ import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 import numpy as np
 from .cross_scale_interaction import CIM
+from .modal_lora import replace_linear_with_modal_lora, set_modal_for_lora
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
-from .mmcv_custom import load_checkpoint
-# from mmseg.utils import get_root_logger
+from .checkpoint import load_checkpoint
 from typing import Optional
 from torch import Tensor
 from .various_receptive import VariousReceptive
 import math
-# from .logger import create_logger
 import os
 import sys
 import logging
@@ -21,6 +20,7 @@ from termcolor import colored
 
 @functools.lru_cache()
 def create_logger(output_dir, dist_rank=0, name=''):
+    os.makedirs(output_dir, exist_ok=True)
     # create logger
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
@@ -45,134 +45,6 @@ def create_logger(output_dir, dist_rank=0, name=''):
     logger.addHandler(file_handler)
 
     return logger
-
-
-class ModalHardGatedLoRALinear(nn.Module):
-    """
-    Hard-gated dual LoRA for two modalities:
-      modal=0 -> RGB LoRA
-      modal=1 -> SAR LoRA
-    The base linear weight is frozen by default; only LoRA params train.
-    """
-
-    def __init__(self, base_linear: nn.Linear, r: int = 8, alpha: float = 16.0, dropout: float = 0.0):
-        super().__init__()
-        assert isinstance(base_linear, nn.Linear)
-        self.in_features = base_linear.in_features
-        self.out_features = base_linear.out_features
-
-        # keep base weight/bias
-        self.weight = nn.Parameter(base_linear.weight.data.clone(), requires_grad=False)
-        if base_linear.bias is not None:
-            self.bias = nn.Parameter(base_linear.bias.data.clone(), requires_grad=False)
-        else:
-            self.bias = None
-
-        self.r = int(r)
-        self.alpha = float(alpha)
-        self.scaling = (self.alpha / self.r) if self.r > 0 else 1.0
-        self.lora_dropout = nn.Dropout(dropout) if dropout and dropout > 0 else nn.Identity()
-
-        # two LoRA adapters
-        if self.r > 0:
-            # A: (r, in), B: (out, r)
-            self.lora_A_rgb = nn.Parameter(torch.zeros(self.r, self.in_features))
-            self.lora_B_rgb = nn.Parameter(torch.zeros(self.out_features, self.r))
-
-            self.lora_A_sar = nn.Parameter(torch.zeros(self.r, self.in_features))
-            self.lora_B_sar = nn.Parameter(torch.zeros(self.out_features, self.r))
-
-            # init
-            nn.init.kaiming_uniform_(self.lora_A_rgb, a=math.sqrt(5))
-            nn.init.zeros_(self.lora_B_rgb)
-            nn.init.kaiming_uniform_(self.lora_A_sar, a=math.sqrt(5))
-            nn.init.zeros_(self.lora_B_sar)
-
-        self._modal = None
-
-    @torch.no_grad()
-    def set_modal(self, modal):
-        """
-        modal: Tensor shape (B,) with int {0,1}, or python list/tuple
-        """
-        if modal is None:
-            self._modal = None
-            return
-        if not torch.is_tensor(modal):
-            modal = torch.as_tensor(modal)
-        self._modal = modal
-
-    def _make_mask(self, x, modal_value: int):
-        """
-        return broadcastable mask for x, where x is (B, ..., in_features)
-        """
-        if self._modal is None:
-            # default: treat as RGB
-            m = torch.zeros((x.shape[0],), device=x.device, dtype=torch.long)
-        else:
-            m = self._modal.to(device=x.device)
-            if m.dim() == 0:
-                m = m.view(1).expand(x.shape[0])
-        mask = (m == modal_value).to(dtype=x.dtype)  # (B,)
-        # broadcast to x's leading dims (B, 1, 1, ...)
-        while mask.dim() < x.dim():
-            mask = mask.unsqueeze(1)
-        return mask
-
-    def forward(self, x):
-        # base linear
-        out = F.linear(x, self.weight, self.bias)
-
-        if self.r <= 0:
-            return out
-
-        x_d = self.lora_dropout(x)
-
-        # RGB LoRA
-        mask_rgb = self._make_mask(x, 0)
-        if mask_rgb.sum().item() > 0:
-            # (.., in) @ (in, r) => (.., r) @ (r, out) => (.., out)
-            lora_rgb = (x_d @ self.lora_A_rgb.t()) @ self.lora_B_rgb.t()
-            out = out + (mask_rgb * lora_rgb) * self.scaling
-
-        # SAR LoRA
-        mask_sar = self._make_mask(x, 1)
-        if mask_sar.sum().item() > 0:
-            lora_sar = (x_d @ self.lora_A_sar.t()) @ self.lora_B_sar.t()
-            out = out + (mask_sar * lora_sar) * self.scaling
-
-        return out
-
-
-def _replace_linear_with_modal_lora(module: nn.Module, r: int, alpha: float, dropout: float,
-                                   target_names=("qkv", "proj", "fc1", "fc2")):
-    """
-    Replace selected nn.Linear layers in-place with ModalHardGatedLoRALinear.
-    target_names: match by attribute/module name suffix.
-    """
-    for name, child in list(module.named_children()):
-        # recurse first
-        _replace_linear_with_modal_lora(child, r, alpha, dropout, target_names)
-
-        # replace if it's a Linear and name matches
-        if isinstance(child, nn.Linear) and any(name.endswith(tn) for tn in target_names):
-            setattr(module, name, ModalHardGatedLoRALinear(child, r=r, alpha=alpha, dropout=dropout))
-
-
-def _freeze_all_except_modal_lora(model: nn.Module):
-    """
-    Freeze all params except LoRA params inside ModalHardGatedLoRALinear.
-    """
-    for p in model.parameters():
-        p.requires_grad = False
-    for m in model.modules():
-        if isinstance(m, ModalHardGatedLoRALinear):
-            # enable LoRA params
-            if m.r > 0:
-                m.lora_A_rgb.requires_grad = True
-                m.lora_B_rgb.requires_grad = True
-                m.lora_A_sar.requires_grad = True
-                m.lora_B_sar.requires_grad = True
 
 
 class Mlp(nn.Module):
@@ -690,25 +562,37 @@ class MultiModalSwinTransformer(nn.Module):
             self.apply(_init_weights)
         else:
             raise TypeError('pretrained must be a str or None')
-        
-    @torch.no_grad()
+
+    def enable_modal_lora(
+        self,
+        *,
+        r=4,
+        alpha=8.0,
+        dropout=0.05,
+        stages=(2, 3),
+        targets=("qkv", "proj", "fc1", "fc2"),
+        freeze_base=False,
+    ):
+        replaced = 0
+        for stage_index in stages:
+            if stage_index < 0 or stage_index >= len(self.layers):
+                raise ValueError(f"Invalid Swin stage index {stage_index}; expected 0-{len(self.layers) - 1}.")
+            replaced += replace_linear_with_modal_lora(
+                self.layers[stage_index],
+                r=r,
+                alpha=alpha,
+                dropout=dropout,
+                target_names=targets,
+                freeze_base=freeze_base,
+            )
+        print(
+            "Enabled modal LoRA for Swin: "
+            f"targets={targets}, stages={stages}, rank={r}, alpha={alpha}, dropout={dropout}, "
+            f"replaced={replaced}, freeze_base={freeze_base}"
+        )
+
     def set_modal(self, modal):
-        # modal: Tensor(B,) int {0,1}
-        for m in self.modules():
-            if isinstance(m, ModalHardGatedLoRALinear):
-                m.set_modal(modal)
-
-    def enable_modal_lora(self, r=8, alpha=16.0, dropout=0.0,
-                          target_names=("qkv", "proj", "fc1", "fc2"),
-                          freeze_base=True):
-        """
-        Call this AFTER init_weights(pretrained=...) so base weights are loaded.
-        """
-        _replace_linear_with_modal_lora(self, r=r, alpha=alpha, dropout=dropout, target_names=target_names)
-        if freeze_base:
-            _freeze_all_except_modal_lora(self)
-
-
+        set_modal_for_lora(self, modal)
 
     def forward(self, x, l, l_mask):
         """Forward function."""
@@ -785,7 +669,7 @@ class MMBasicLayer(nn.Module):
                 norm_layer=norm_layer)
             for i in range(depth)])
 
-        # Cross-modal Alignment Branch
+        # Language-guided alignment branch
         self.fusion = PWAM(dim,  # both the visual input and for combining, num of channels
                            dim,  # v_in
                            768,  # l_in

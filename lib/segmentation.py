@@ -2,14 +2,66 @@ import torch
 import torch.nn as nn
 from .mask_predictor import SimpleDecoding
 from .backbone import MultiModalSwinTransformer
+from .dinov3_convnext import DINOv3ConvNextBackbone
 from ._utils import LAVT, LAVTOne
 
 
 __all__ = ['lavt', 'lavt_one']
 
 
+def _parse_modal_lora_stages(args):
+    value = getattr(args, "modal_lora_stages", "2,3")
+    if isinstance(value, (list, tuple)):
+        return tuple(int(item) for item in value)
+    return tuple(int(item.strip()) for item in str(value).split(",") if item.strip())
+
+
+def _parse_modal_lora_targets(args, default_targets):
+    value = getattr(args, "modal_lora_targets", "")
+    if not value:
+        return tuple(default_targets)
+    if isinstance(value, (list, tuple)):
+        return tuple(str(item) for item in value)
+    return tuple(item.strip() for item in str(value).split(",") if item.strip())
+
+
+def _modal_lora_kwargs(args, default_targets):
+    return {
+        "use_modal_lora": getattr(args, "use_modal_lora", False),
+        "modal_lora_r": getattr(args, "modal_lora_r", 4),
+        "modal_lora_alpha": getattr(args, "modal_lora_alpha", 8.0),
+        "modal_lora_dropout": getattr(args, "modal_lora_dropout", 0.05),
+        "modal_lora_stages": _parse_modal_lora_stages(args),
+        "modal_lora_targets": _parse_modal_lora_targets(args, default_targets),
+        "modal_lora_freeze_base": getattr(args, "modal_lora_freeze_base", False),
+    }
+
+
+def _maybe_enable_swin_modal_lora(backbone, args):
+    if not getattr(args, "use_modal_lora", False):
+        return
+    backbone.enable_modal_lora(
+        r=getattr(args, "modal_lora_r", 4),
+        alpha=getattr(args, "modal_lora_alpha", 8.0),
+        dropout=getattr(args, "modal_lora_dropout", 0.05),
+        stages=_parse_modal_lora_stages(args),
+        targets=_parse_modal_lora_targets(args, ("qkv", "proj", "fc1", "fc2")),
+        freeze_base=getattr(args, "modal_lora_freeze_base", False),
+    )
+
+
 # LAVT
 def _segm_lavt(pretrained, args):
+    if getattr(args, "vision_backbone", "swin_b") == "dinov3_convnext_b":
+        mha = [int(a) for a in args.mha.split('-')] if args.mha else [1, 1, 1, 1]
+        backbone = DINOv3ConvNextBackbone(
+            args.dinov3_convnext_path,
+            num_heads_fusion=mha,
+            fusion_drop=args.fusion_drop,
+            **_modal_lora_kwargs(args, ("pointwise_conv1", "pointwise_conv2")),
+        )
+        return LAVT(backbone, SimpleDecoding(1024))
+
     # initialize the SwinTransformer backbone with the specified version
     if args.swin_type == 'tiny':
         embed_dim = 96
@@ -48,24 +100,16 @@ def _segm_lavt(pretrained, args):
                                          ape=False, drop_path_rate=0.3, patch_norm=True,
                                          out_indices=out_indices,
                                          use_checkpoint=False, num_heads_fusion=mha,
-                                         fusion_drop=args.fusion_drop
+                                         fusion_drop=args.fusion_drop,
+
                                          )
     if pretrained:
-        print('Initializing Multi-modal Swin Transformer weights from ' + pretrained)
+        print('Initializing language-guided Swin Transformer weights from ' + pretrained)
         backbone.init_weights(pretrained=pretrained)
-
-        if getattr(args, "use_modal_lora", False):
-            backbone.enable_modal_lora(
-                r=args.lora_r,
-                alpha=args.lora_alpha,
-                dropout=args.lora_dropout,
-                target_names=("qkv", "proj", "fc1", "fc2"),
-                freeze_base=True
-            )
-            print(f"[LoRA] Enabled modal hard-gated LoRA: r={args.lora_r}, alpha={args.lora_alpha}, drop={args.lora_dropout}")
     else:
-        print('Randomly initialize Multi-modal Swin Transformer weights.')
+        print('Randomly initialize language-guided Swin Transformer weights.')
         backbone.init_weights()
+    _maybe_enable_swin_modal_lora(backbone, args)
 
     model_map = [SimpleDecoding, LAVT]
 
@@ -89,6 +133,16 @@ def lavt(pretrained='', args=None):
 # LAVT One: put BERT inside the overall model #
 ###############################################
 def _segm_lavt_one(pretrained, args):
+    if getattr(args, "vision_backbone", "swin_b") == "dinov3_convnext_b":
+        mha = [int(a) for a in args.mha.split('-')] if args.mha else [1, 1, 1, 1]
+        backbone = DINOv3ConvNextBackbone(
+            args.dinov3_convnext_path,
+            num_heads_fusion=mha,
+            fusion_drop=args.fusion_drop,
+            **_modal_lora_kwargs(args, ("pointwise_conv1", "pointwise_conv2")),
+        )
+        return LAVTOne(backbone, SimpleDecoding(1024), args)
+
     # initialize the SwinTransformer backbone with the specified version
     if args.swin_type == 'tiny':
         embed_dim = 96
@@ -132,21 +186,12 @@ def _segm_lavt_one(pretrained, args):
                                          # only_fusion=args.only_fusion,
                                          )
     if pretrained:
-        print('Initializing Multi-modal Swin Transformer weights from ' + pretrained)
+        print('Initializing language-guided Swin Transformer weights from ' + pretrained)
         backbone.init_weights(pretrained=pretrained)
-
-        if getattr(args, "use_modal_lora", False):
-            backbone.enable_modal_lora(
-                r=args.lora_r,
-                alpha=args.lora_alpha,
-                dropout=args.lora_dropout,
-                target_names=("qkv", "proj", "fc1", "fc2"),
-                freeze_base=True
-            )
-            print(f"[LoRA] Enabled modal hard-gated LoRA: r={args.lora_r}, alpha={args.lora_alpha}, drop={args.lora_dropout}")
     else:
-        print('Randomly initialize Multi-modal Swin Transformer weights.')
+        print('Randomly initialize language-guided Swin Transformer weights.')
         backbone.init_weights()
+    _maybe_enable_swin_modal_lora(backbone, args)
 
     model_map = [SimpleDecoding, LAVTOne]
     classifier = model_map[0](8*embed_dim)

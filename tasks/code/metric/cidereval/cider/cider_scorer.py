@@ -8,7 +8,10 @@ import pickle
 import math
 from copy import copy
 
-from importlib_resources import files, as_file
+try:
+    from importlib.resources import files, as_file
+except ImportError:
+    from importlib_resources import files, as_file
 import numpy as np
 
 

@@ -6,17 +6,16 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 import torch
 import torch.utils.data
 import utils
-from bert.modeling_bert import BertModel
-from lib import segmentation
 from PIL import Image
 from data.DiverseDataset import DiverseDataset
 from tasks.code.model import RemoteSAM
+from tasks.code.runtime import gather_object, load_model_and_text_encoder
 import warnings
 warnings.filterwarnings("ignore")
 
 
-def infer(model, data_loader, bert_model, args):
-    model = RemoteSAM(model, args.local_rank, use_EPOC=args.EPOC, EPOC_threshold = 0.25)
+def infer(model, data_loader, bert_model, args, device):
+    model = RemoteSAM(model, device, use_EPOC=args.EPOC, args=args, text_encoder=bert_model, EPOC_threshold = 0.25)
     metric_logger = utils.MetricLogger(delimiter="  ")
 
     # evaluation variables
@@ -51,15 +50,16 @@ def infer(model, data_loader, bert_model, args):
 
     # sync ddp processes
         # cum_boxes
-    gathered = [None for _ in range(utils.get_world_size())]
-    torch.distributed.all_gather_object(gathered, cum_boxes)
+    gathered = gather_object(cum_boxes)
     cum_boxes = sum(gathered, []) 
 
     cum_boxes.sort(key=lambda x: x[5])
 
     if args.local_rank == 0:
         # save result
-        with open(args.save_path + 'Task2_' + args._class + '.txt', 'w') as f:
+        os.makedirs(args.save_path, exist_ok=True)
+        result_path = os.path.join(args.save_path, 'Task2_' + args._class + '.txt')
+        with open(result_path, 'w') as f:
             for box in cum_boxes:
                 x1, y1, x2, y2, conf, image_name = box
                 pts = [x1, y1, x2, y1, x2, y2, x1, y2]
@@ -74,33 +74,18 @@ def main(args):
     utils.init_distributed_mode(args)
 
     dataset_test = DiverseDataset(args)
-    test_sampler = torch.utils.data.distributed.DistributedSampler(dataset_test, 
-        num_replicas=utils.get_world_size(), rank=utils.get_rank(), shuffle=False)
+    if utils.is_dist_avail_and_initialized():
+        test_sampler = torch.utils.data.distributed.DistributedSampler(dataset_test,
+            num_replicas=utils.get_world_size(), rank=utils.get_rank(), shuffle=False)
+    else:
+        test_sampler = torch.utils.data.SequentialSampler(dataset_test)
     data_loader_test = torch.utils.data.DataLoader(dataset_test,
         batch_size=1, sampler=test_sampler, num_workers=args.workers, pin_memory=args.pin_mem)
-    
-    model = segmentation.__dict__[args.model](pretrained='',args=args)
-    model.to(args.local_rank)
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank])
-    single_model = model.module 
 
-    checkpoint = torch.load(args.resume, map_location='cpu')
-    single_model.load_state_dict(checkpoint['model'], strict=False)
-
-    if args.model != 'lavt_one':
-        model_class = BertModel
-        bert_model = model_class.from_pretrained(args.ck_bert)
-        if args.ddp_trained_weights:
-            bert_model.pooler = None
-        bert_model.to(args.local_rank)
-        bert_model = torch.nn.parallel.DistributedDataParallel(bert_model, device_ids=[args.local_rank])
-        single_bert_model = bert_model
-        single_bert_model.load_state_dict(checkpoint['bert_model'])
-    else:
-        bert_model = None
-        single_bert_model = None
-
-    infer(model, data_loader_test, bert_model, args=args)
+    model, bert_model, device = load_model_and_text_encoder(
+        args, distributed=utils.is_dist_avail_and_initialized()
+    )
+    infer(model, data_loader_test, bert_model, args=args, device=device)
 
 
 if __name__ == "__main__":
