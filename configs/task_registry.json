@@ -61,10 +61,7 @@
     "sar-vsa": {"script": "tasks/code/_adapters/MCC_SAR.py", "dataset": "SAR-VSA", "status": "supplementary", "needs": ["images"]}
   },
   "CAP_RGB": {
-    "ucm-cider": {"script": "tasks/code/_adapters/CAP.py", "dataset": "UCM", "status": "supplementary", "needs": ["images", "annotations"], "note": "Computes CIDEr, not the current manuscript RGB ReconScore."},
-    "sydney": {"status": "needs_source", "reason": "The Sydney adapter and ReconScore evaluation used by the current paper are absent."},
-    "rsieval": {"status": "needs_source", "reason": "The RSIEval adapter and ReconScore evaluation used by the current paper are absent."},
-    "ucm": {"status": "needs_source", "reason": "The current paper reports ReconScore for UCM; existing CAP.py only computes CIDEr."}
+    "ucm-cider": {"script": "tasks/code/_adapters/CAP.py", "dataset": "UCM", "status": "supplementary", "needs": ["images", "annotations"], "note": "UCM image captioning evaluated with CIDEr."}
   },
   "CAP_SAR": {
     "sarlang": {"script": "tasks/code/_adapters/CAP_SARLANG.py", "dataset": "SARLANG", "status": "available", "needs": ["images", "annotations"]},

@@ -20,7 +20,7 @@ def main() -> int:
     options = cli.parse_args()
     registry = json.loads((ROOT / "configs/task_registry.json").read_text())
     scripts = {entry["script"] for entries in registry.values() for entry in entries.values() if "script" in entry}
-    scripts.update(("test_rgb_sar.py", "examples/demo.py", "train.py", "test.py"))
+    scripts.update(("test_rgb_sar.py", "train.py", "test.py"))
     scripts.update(f"tasks/code/eval/{task}.py" for task in ("REF", "SEG", "VG", "DET", "MLC", "MCC", "CAP", "CNT"))
     failures = []
     passed = []

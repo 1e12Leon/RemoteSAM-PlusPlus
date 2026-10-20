@@ -68,7 +68,7 @@ def main(task: str | None = None) -> int:
     if entry is None:
         parser.error(f"Unsupported case {key}/{args.dataset}; choose from {', '.join(registry[key])}")
     if entry["status"] == "needs_source":
-        parser.error(f"{key}/{args.dataset}: {entry['reason']} See docs/paper_alignment.md")
+        parser.error(f"{key}/{args.dataset}: {entry['reason']}")
     missing = [name for name in entry["needs"] if not getattr(args, name)]
     if not args.resume:
         missing.append("resume")
