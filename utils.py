@@ -1,3 +1,4 @@
+# Shared RemoteSAM++ training and task-transition utilities.
 from __future__ import print_function
 from collections import defaultdict, deque
 import datetime

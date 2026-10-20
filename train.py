@@ -1,3 +1,4 @@
+# RemoteSAM++ distributed referring-segmentation training.
 from __future__ import annotations
 
 import datetime

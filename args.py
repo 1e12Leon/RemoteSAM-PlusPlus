@@ -1,3 +1,4 @@
+# RemoteSAM++ training and downstream evaluation arguments.
 import argparse
 
 
