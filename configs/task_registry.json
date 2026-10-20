@@ -44,7 +44,7 @@
   "MLC_RGB": {
     "dior": {"script": "tasks/code/_adapters/MLC.py", "dataset": "DIOR", "status": "available", "needs": ["images", "annotations"]},
     "dotav2": {"script": "tasks/code/_adapters/MLC.py", "dataset": "DOTAv2", "status": "available", "needs": ["images", "annotations"]},
-    "satin": {"script": "tasks/code/_adapters/MLC_SATIN.py", "status": "available", "needs": ["data_root"], "extra": ["--standalone_shard", "--num_shards", "1", "--shard_index", "0"], "device_index": true, "note": "Four SATIN constituent train splits; micro accuracy over labels, NOT exact-match accuracy. Native standalone mode writes raw statistics; use tools/summarize_satin.py."}
+    "satin": {"script": "tasks/code/_adapters/MLC_SATIN.py", "status": "available", "needs": ["data_root"], "extra": ["--standalone_shard", "--num_shards", "1", "--shard_index", "0"], "device_index": true, "note": "Four SATIN constituent train splits; micro accuracy over labels. Summarize statistics with tasks/code/metric/mlc_summary.py."}
   },
   "MLC_SAR": {
     "msar": {"script": "tasks/code/_adapters/MLC_ranking.py", "dataset": "MSAR", "status": "available", "needs": ["images", "annotations"], "note": "Recovered MSAR-1.0 four-class COCO adapter, micro label accuracy and native ranked mAP; automatic modality routing. Full paper scores not rerun."}

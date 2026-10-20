@@ -4,7 +4,7 @@ from pathlib import Path
 
 import torch.nn as nn
 
-from transformers_compat import patch_optional_sklearn
+from lib.transformers_compat import patch_optional_sklearn
 
 patch_optional_sklearn()
 from transformers import AutoModel, BertModel

@@ -16,7 +16,7 @@ from torchvision.transforms import functional as TF
 import transforms as T
 from lib.modal_inference import infer_modal_tensor_from_image
 from tasks.code.runtime import load_model_and_text_encoder
-from transformers_compat import patch_optional_sklearn
+from lib.transformers_compat import patch_optional_sklearn
 
 patch_optional_sklearn()
 from transformers import AutoTokenizer

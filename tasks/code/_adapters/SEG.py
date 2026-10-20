@@ -11,7 +11,7 @@ from torchvision.transforms import functional as F1
 
 from torchvision.transforms import InterpolationMode
 import transforms as T
-from transformers_compat import patch_optional_sklearn
+from lib.transformers_compat import patch_optional_sklearn
 
 patch_optional_sklearn()
 from transformers import AutoTokenizer

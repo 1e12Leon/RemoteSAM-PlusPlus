@@ -11,7 +11,7 @@ import torch.utils.data as data
 from PIL import Image
 from pycocotools import mask as mask_utils
 
-from transformers_compat import patch_optional_sklearn
+from lib.transformers_compat import patch_optional_sklearn
 
 patch_optional_sklearn()
 from transformers import AutoTokenizer

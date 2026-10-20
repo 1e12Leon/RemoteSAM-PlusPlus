@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
-from transformers_compat import patch_optional_sklearn
+from lib.transformers_compat import patch_optional_sklearn
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 patch_optional_sklearn()

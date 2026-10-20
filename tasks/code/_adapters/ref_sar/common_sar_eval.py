@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import pickle
 import re
@@ -25,16 +24,12 @@ import utils
 from args import get_parser
 from lib import segmentation
 from lib.text_encoders import build_text_encoder_model
-from transformers_compat import patch_optional_sklearn
+from lib.transformers_compat import patch_optional_sklearn
 
 patch_optional_sklearn()
 from transformers import AutoTokenizer
 
-_TEST_UTILS_SPEC = importlib.util.spec_from_file_location("remotesam_test_utils", ROOT / "test.py")
-if _TEST_UTILS_SPEC is None or _TEST_UTILS_SPEC.loader is None:
-    raise RuntimeError("Cannot load project test.py utilities.")
-_TEST_UTILS = importlib.util.module_from_spec(_TEST_UTILS_SPEC)
-_TEST_UTILS_SPEC.loader.exec_module(_TEST_UTILS)
+from tasks.code._adapters import ref_utils as _TEST_UTILS
 
 VALID_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 DEFAULT_CHECKPOINT = ROOT / "checkpoints/model_best_mIoU_RemoteSAM_DINOv3ConvNeXtB_ModernBERT.pth"

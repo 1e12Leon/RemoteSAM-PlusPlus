@@ -8,7 +8,7 @@ import torchvision
 import numpy as np
 import utils
 
-from transformers_compat import patch_optional_sklearn
+from lib.transformers_compat import patch_optional_sklearn
 
 patch_optional_sklearn()
 import transformers
