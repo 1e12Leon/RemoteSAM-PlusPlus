@@ -6,6 +6,9 @@ from tqdm import tqdm
 import numpy as np
 
 
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff'}
+
+
 class COCO_style(torch.utils.data.Dataset):
 
     classes = None
@@ -19,6 +22,7 @@ class COCO_style(torch.utils.data.Dataset):
         self.image_path = args.imageFolder
         self.anno_path = args.annoFolder
 
+        self.has_groundtruth = True
         self.image_list, self.image2groundtruth = self.load_data()
 
 
@@ -64,22 +68,55 @@ class DOTA_style(COCO_style):
 
     def load_data(self):
 
-        image_list = os.listdir(self.image_path)
+        image_list = [
+            name for name in os.listdir(self.image_path)
+            if os.path.splitext(name)[1].lower() in IMAGE_EXTENSIONS
+        ]
         image2groundtruth = {}
 
         for image_name in image_list:
             image2groundtruth[image_name] = [0] * len(self.classes)
 
-        # skip for no gt available in DOTA test set
-        if self.split != 'test':
-            for image_name in tqdm(image_list, desc="Collecting groundtruth", total=len(image_list)):
-                anno_name = os.path.splitext(image_name)[0] + ".txt"
-                with open(os.path.join(self.anno_path, anno_name), 'r') as f:
-                    for line in f:
-                        data = line.strip().split(' ')
-                        if data[8] in self.convert_name:
-                            data[8] = self.convert_name[data[8]]
-                        image2groundtruth[image_name][self.classes.index(data[8])] = 1
+        self.has_groundtruth = (
+            os.path.isdir(self.anno_path)
+            and any(name.endswith('.txt') for name in os.listdir(self.anno_path))
+        )
+        if not self.has_groundtruth:
+            if self.split != 'test':
+                raise FileNotFoundError(f"No DOTA annotation txt files found under {self.anno_path}")
+            return sorted(image_list), image2groundtruth
+
+        parsed_objects = 0
+        unknown_classes = {}
+
+        for image_name in tqdm(image_list, desc="Collecting groundtruth", total=len(image_list)):
+            anno_name = os.path.splitext(image_name)[0] + ".txt"
+            anno_file = os.path.join(self.anno_path, anno_name)
+            if not os.path.isfile(anno_file):
+                continue
+
+            with open(anno_file, 'r') as f:
+                for line in f:
+                    data = line.strip().split()
+                    if len(data) < 9:
+                        continue
+                    classname = self.convert_name.get(data[8], data[8])
+                    if classname in self.classes:
+                        image2groundtruth[image_name][self.classes.index(classname)] = 1
+                        parsed_objects += 1
+                    else:
+                        unknown_classes[data[8]] = unknown_classes.get(data[8], 0) + 1
+
+        if unknown_classes:
+            print(f"Warning: ignored unknown DOTA classes: {unknown_classes}")
+
+        if self.split != 'test' and parsed_objects == 0:
+            raise ValueError(
+                f"DOTA annotations were found under {self.anno_path}, "
+                "but no objects matched the configured MLC classes."
+            )
+
+        print(f"Loaded DOTA groundtruth: {parsed_objects} objects matched {len(self.classes)} classes.")
 
         return sorted(image_list), image2groundtruth
 

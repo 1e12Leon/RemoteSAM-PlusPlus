@@ -58,8 +58,8 @@ def get_parser():
                         help='dropout inside the modal LoRA residual branch')
     parser.add_argument('--modal_lora_lr', default=0.00005, type=float,
                         help='learning rate for modal LoRA parameters')
-    parser.add_argument('--modal_lora_stages', default='2,3',
-                        help='0-indexed backbone stages using modal LoRA; default keeps it on high-level stages')
+    parser.add_argument('--modal_lora_stages', default='0,1',
+                        help='0-indexed backbone stages using modal LoRA; paper checkpoint uses stages 0 and 1')
     parser.add_argument('--modal_lora_targets', default='',
                         help='comma-separated target Linear names; default is backbone-specific')
     parser.add_argument('--modal_lora_freeze_base', action='store_true',

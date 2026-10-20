@@ -28,10 +28,10 @@ class MCC(torch.utils.data.Dataset):
         image2groundtruth = {}
 
         for index, classname in enumerate(self.classes):
-            if classname in self.convert_name:
-                classname = self.convert_name[classname]
-            for image in os.listdir(os.path.join(self.anno_path, classname)):
-                image_path = os.path.join(classname, image)
+            folder_name = self.convert_name.get(classname, classname)
+            class_dir = os.path.join(self.anno_path, folder_name)
+            for image in sorted(os.listdir(class_dir)):
+                image_path = os.path.join(folder_name, image)
                 image2groundtruth[image_path] = index
                 image_list.append(image_path)
 
@@ -53,12 +53,24 @@ class MCC(torch.utils.data.Dataset):
 
 class UCM_MCC(MCC):
 
-    classes = ['agricultural', 'airplane', 'baseballfield', 'beach', 'buildings', 'chaparral', 'denseresidential', 'forest', 'freeway', 'golffield', 'harbor', 'intersection', 'mediumresidential', 'mobilehomepark', 'overpass', 'parkinglot', 'river', 'runway', 'sparseresidential', 'storagetank', 'tenniscourt']
+    classes = [
+        'agricultural', 'airplane', 'baseball diamond', 'beach', 'buildings',
+        'chaparral', 'dense residential', 'forest', 'freeway', 'golf course',
+        'harbor', 'intersection', 'medium residential', 'mobile home park',
+        'overpass', 'parking lot', 'river', 'runway', 'sparse residential',
+        'storage tank', 'tennis court'
+    ]
 
     convert_name = {
-        'baseballfield': 'baseballdiamond',
-        'golffield': 'golfcourse',
-        'storagetank': 'storagetanks'
+        'baseball diamond': 'baseballdiamond',
+        'dense residential': 'denseresidential',
+        'golf course': 'golfcourse',
+        'medium residential': 'mediumresidential',
+        'mobile home park': 'mobilehomepark',
+        'parking lot': 'parkinglot',
+        'sparse residential': 'sparseresidential',
+        'storage tank': 'storagetanks',
+        'tennis court': 'tenniscourt'
     }
 
 
@@ -69,3 +81,38 @@ class AID_MCC(MCC):
     convert_name = {
         'storagetank': 'storagetanks'
     }
+
+
+class NWPU_MCC(MCC):
+
+    classes = [
+        'airplane', 'airport', 'baseball diamond', 'basketball court', 'beach',
+        'bridge', 'chaparral', 'church', 'circular farmland', 'cloud',
+        'commercial area', 'dense residential', 'desert', 'forest', 'freeway',
+        'golf course', 'ground track field', 'harbor', 'industrial area',
+        'intersection', 'island', 'lake', 'meadow', 'medium residential',
+        'mobile home park', 'mountain', 'overpass', 'palace', 'parking lot',
+        'railway', 'railway station', 'rectangular farmland', 'river',
+        'roundabout', 'runway', 'sea ice', 'ship', 'snowberg',
+        'sparse residential', 'stadium', 'storage tank', 'tennis court',
+        'terrace', 'thermal power station', 'wetland'
+    ]
+
+    convert_name = {classname: classname.replace(' ', '_') for classname in classes}
+
+
+class PatternNet_MCC(MCC):
+
+    classes = [
+        'airplane', 'baseball field', 'basketball court', 'beach', 'bridge',
+        'cemetery', 'chaparral', 'christmas tree farm', 'closed road',
+        'coastal mansion', 'crosswalk', 'dense residential', 'ferry terminal',
+        'football field', 'forest', 'freeway', 'golf course', 'harbor',
+        'intersection', 'mobile home park', 'nursing home', 'oil gas field',
+        'oil well', 'overpass', 'parking lot', 'parking space', 'railway',
+        'river', 'runway', 'runway marking', 'shipping yard', 'solar panel',
+        'sparse residential', 'storage tank', 'swimming pool', 'tennis court',
+        'transformer station', 'wastewater treatment plant'
+    ]
+
+    convert_name = {classname: classname.replace(' ', '_') for classname in classes}

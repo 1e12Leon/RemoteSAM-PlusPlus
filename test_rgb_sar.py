@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import importlib.util
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -10,16 +12,22 @@ import utils
 from data.all_dataset import All_Dataset
 from lib import segmentation
 from lib.text_encoders import build_text_encoder_model
-from test import (
-    checkpoint_has_modal_lora,
-    compute_iou,
-    get_transform,
-    load_weights,
-    maybe_set_window_size_from_checkpoint,
-    modal_to_tensor,
-    remove_prefix,
-    torch_load_checkpoint,
+# Resolve the existing file explicitly: the SAR test/ package otherwise shadows test.py.
+_TEST_SPEC = importlib.util.spec_from_file_location(
+    "remotesam_test_utils", Path(__file__).resolve().with_name("test.py")
 )
+if _TEST_SPEC is None or _TEST_SPEC.loader is None:
+    raise RuntimeError("Cannot load test.py utilities")
+_TEST_UTILS = importlib.util.module_from_spec(_TEST_SPEC)
+_TEST_SPEC.loader.exec_module(_TEST_UTILS)
+checkpoint_has_modal_lora = _TEST_UTILS.checkpoint_has_modal_lora
+compute_iou = _TEST_UTILS.compute_iou
+get_transform = _TEST_UTILS.get_transform
+load_weights = _TEST_UTILS.load_weights
+maybe_set_window_size_from_checkpoint = _TEST_UTILS.maybe_set_window_size_from_checkpoint
+modal_to_tensor = _TEST_UTILS.modal_to_tensor
+remove_prefix = _TEST_UTILS.remove_prefix
+torch_load_checkpoint = _TEST_UTILS.torch_load_checkpoint
 
 
 MODALITIES = {

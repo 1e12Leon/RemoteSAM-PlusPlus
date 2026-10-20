@@ -85,6 +85,12 @@ class DOTA_CNT(Falcon_CNT):
 
     # unify classnames
     convert_name = {
+        "plane":                    "airplane",
+        "storage-tank":             "storagetank",
+        "baseball-diamond":         "baseballfield",
+        "tennis-court":             "tenniscourt",
+        "basketball-court":         "basketballcourt",
+        "ground-track-field":       "groundtrackfield",
         "baseball field":           "baseballfield",
         "basketball court":         "basketballcourt",
         "crane":                    "container-crane",
@@ -95,4 +101,21 @@ class DOTA_CNT(Falcon_CNT):
         "tennis court":             "tenniscourt",
     }
 
-    prior_area_info = {'airplane': 35, 'ship': 15, 'storagetank': 8, 'baseballfield': 81, 'tenniscourt': 153, 'basketballcourt': 576, 'groundtrackfield': 210, 'harbor': 64, 'bridge': 24, 'vehicle': 21, 'helicopter': 162, 'roundabout': 16, 'soccer-ball-field': 72, 'swimming-pool': 20, "container-crane": 187, "airport": 1337, "helipad":121}
+    prior_area_info = {'airplane': 35, 'ship': 15, 'storagetank': 8, 'baseballfield': 81, 'tenniscourt': 153, 'basketballcourt': 576, 'groundtrackfield': 210, 'harbor': 64, 'bridge': 24, 'large-vehicle': 80, 'small-vehicle': 21, 'vehicle': 21, 'helicopter': 162, 'roundabout': 16, 'soccer-ball-field': 72, 'swimming-pool': 20, "container-crane": 187, "airport": 1337, "helipad":121}
+
+
+class SARDet_CNT(Falcon_CNT):
+
+    # SARDet_100K category names already match the detection prompts used by SARDet_DET.
+    convert_name = {}
+
+    # Keep the CNT evaluator's existing minimum-area filter active without imposing
+    # RGB/DOTA-specific object-size priors on SAR targets.
+    prior_area_info = {
+        'ship': 1,
+        'aircraft': 1,
+        'car': 1,
+        'tank': 1,
+        'bridge': 1,
+        'harbor': 1,
+    }

@@ -1,0 +1,17 @@
+{
+  "model": "lavt_one",
+  "vision_backbone": "dinov3_convnext_b",
+  "text_encoder": "modernbert",
+  "img_size": 896,
+  "max_tokens": 20,
+  "use_modal_lora": true,
+  "modal_lora_stages": "0,1",
+  "modal_lora_targets": "pointwise_conv1,pointwise_conv2",
+  "modal_lora_r": 4,
+  "modal_lora_alpha": 8.0,
+  "modal_lora_dropout": 0.05,
+  "text_adapter_dropout": 0.1,
+  "no_text_adapter": false,
+  "dinov3_convnext_path": "./dinov3-convnext-B",
+  "modernbert_path": "./gte-modernbert-base"
+}

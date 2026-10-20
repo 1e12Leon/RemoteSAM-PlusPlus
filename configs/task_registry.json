@@ -1,0 +1,80 @@
+{
+  "REF_RGB": {
+    "rrsisd": {"script": "tasks/code/_adapters/REF.py", "dataset": "rrsisd", "status": "available", "needs": ["images", "refs", "instances"]},
+    "risbench": {"script": "tasks/code/_adapters/REF.py", "dataset": "rrsisd", "status": "available", "needs": ["images", "refs", "instances"]}
+  },
+  "REF_SAR": {
+    "sardet100k": {"script": "tasks/code/_adapters/ref_sar/test_sardet100k_sar.py", "status": "available", "needs": ["data_root"]},
+    "openearthmap": {"script": "tasks/code/_adapters/ref_sar/test_openearthmap_sar.py", "status": "available", "needs": ["data_root"]},
+    "fusarmap": {"script": "tasks/code/_adapters/ref_sar/test_fusar_map_sar.py", "status": "available", "needs": ["data_root"]},
+    "pie": {"script": "tasks/code/_adapters/ref_sar/test_pie_rgb_sar_sar.py", "status": "available", "needs": ["data_root"]},
+    "yeseg": {"script": "tasks/code/_adapters/ref_sar/test_yeseg_opt_sar.py", "status": "available", "needs": ["data_root"]},
+    "ddhrnet": {"script": "tasks/code/_adapters/ref_sar/test_ddhrnet_dat_sar.py", "status": "available", "needs": ["data_root"]}
+  },
+  "SEG_RGB": {
+    "potsdam": {"script": "tasks/code/_adapters/SEG_Potsdam.py", "status": "available", "needs": ["images", "annotations"]},
+    "isaid": {"script": "tasks/code/_adapters/SEG.py", "status": "available", "needs": ["images", "annotations"]},
+    "vaihingen": {"script": "tasks/code/_adapters/SEG_Vaihingen.py", "status": "available", "needs": ["images", "annotations"], "note": "Recovered protocol: exactly 113 test labels, six classes including clutter; automatic image-content modality gate."},
+    "deepglobe": {"script": "tasks/code/_adapters/SEG_DeepGlobe_folder.py", "status": "available", "needs": ["images", "annotations"], "images_flag": "--image_dir", "annotations_flag": "--mask_dir", "note": "Recovered labeled train-folder evaluation, six classes, unknown ignored; NOT an official held-out test score."}
+  },
+  "SEG_SAR": {
+    "whu": {"script": "tasks/code/_adapters/SEG_SAR.py", "dataset": "whu_sar", "status": "available", "needs": ["data_root"], "extra": ["--include_background", "--merge_strategy", "prob_argmax"]},
+    "openearthmap": {"script": "tasks/code/_adapters/SEG_SAR.py", "dataset": "openearthmap_sar", "status": "supplementary", "needs": ["data_root"]},
+    "fusarmap": {"script": "tasks/code/_adapters/SEG_SAR.py", "dataset": "fusar_sar", "status": "supplementary", "needs": ["data_root"]},
+    "pie": {"script": "tasks/code/_adapters/SEG_SAR.py", "dataset": "pie_sar", "status": "supplementary", "needs": ["data_root"]},
+    "yeseg": {"script": "tasks/code/_adapters/SEG_SAR.py", "dataset": "yeseg_sar", "status": "supplementary", "needs": ["data_root"]},
+    "ddhrnet-korea": {"script": "tasks/code/_adapters/SEG_SAR.py", "dataset": "ddhrnet_korea_sar", "status": "supplementary", "needs": ["data_root"]},
+    "ddhrnet-shandong": {"script": "tasks/code/_adapters/SEG_SAR.py", "dataset": "ddhrnet_shandong_sar", "status": "supplementary", "needs": ["data_root"]},
+    "ddhrnet-xian": {"script": "tasks/code/_adapters/SEG_SAR.py", "dataset": "ddhrnet_xian_sar", "status": "supplementary", "needs": ["data_root"]}
+  },
+  "VG_RGB": {
+    "rsvg": {"script": "tasks/code/_adapters/VG.py", "dataset": "RSVG", "status": "available", "needs": ["images", "annotations"]}
+  },
+  "VG_SAR": {
+    "sardet100k": {"script": "tasks/code/_adapters/VG_refs.py", "dataset": "SARDet", "status": "available", "needs": ["images", "refs", "instances"], "note": "Recovered normal grounding evaluation with refs/instances; no oracle IoU scoring. Automatic image-content modality routing."},
+    "sarvg": {"script": "tasks/code/_adapters/VG.py", "dataset": "SARVG", "status": "supplementary", "needs": ["images", "annotations"]}
+  },
+  "DET_RGB": {
+    "dior": {"script": "tasks/code/_adapters/DET.py", "dataset": "DIOR", "status": "available", "needs": ["images", "annotations", "classes"]},
+    "dotav2": {"script": "tasks/code/_adapters/DET_DOTA.py", "dataset": "DOTAv2", "status": "available", "needs": ["images", "annotations", "classes"], "note": "Exports Task2_<class>.txt; official DOTA evaluation/merge is a separate step."}
+  },
+  "DET_SAR": {
+    "sardet100k": {"script": "tasks/code/_adapters/DET.py", "dataset": "SARDet", "status": "available", "needs": ["images", "annotations", "classes"], "note": "Available task evaluation; no separate SAR detection table in the current manuscript."}
+  },
+  "MLC_RGB": {
+    "dior": {"script": "tasks/code/_adapters/MLC.py", "dataset": "DIOR", "status": "available", "needs": ["images", "annotations"]},
+    "dotav2": {"script": "tasks/code/_adapters/MLC.py", "dataset": "DOTAv2", "status": "available", "needs": ["images", "annotations"]},
+    "satin": {"script": "tasks/code/_adapters/MLC_SATIN.py", "status": "available", "needs": ["data_root"], "extra": ["--standalone_shard", "--num_shards", "1", "--shard_index", "0"], "device_index": true, "note": "Four SATIN constituent train splits; micro accuracy over labels, NOT exact-match accuracy. Native standalone mode writes raw statistics; use tools/summarize_satin.py."}
+  },
+  "MLC_SAR": {
+    "msar": {"script": "tasks/code/_adapters/MLC_ranking.py", "dataset": "MSAR", "status": "available", "needs": ["images", "annotations"], "note": "Recovered MSAR-1.0 four-class COCO adapter, micro label accuracy and native ranked mAP; automatic modality routing. Full paper scores not rerun."}
+  },
+  "MCC_RGB": {
+    "ucm": {"script": "tasks/code/_adapters/MCC.py", "dataset": "UCM", "status": "available", "needs": ["images"]},
+    "resisc45": {"script": "tasks/code/_adapters/MCC.py", "dataset": "NWPU", "status": "available", "needs": ["images"]},
+    "patternnet": {"script": "tasks/code/_adapters/MCC.py", "dataset": "PatternNet", "status": "available", "needs": ["images"]}
+  },
+  "MCC_SAR": {
+    "fusar-ship": {"script": "tasks/code/_adapters/MCC_SAR.py", "dataset": "FUSAR-SHIP", "status": "supplementary", "needs": ["images"]},
+    "mstar": {"script": "tasks/code/_adapters/MCC_SAR.py", "dataset": "MSTAR", "status": "supplementary", "needs": ["images"]},
+    "sar-acd": {"script": "tasks/code/_adapters/MCC_SAR.py", "dataset": "SAR-ACD", "status": "supplementary", "needs": ["images"]},
+    "sar-vsa": {"script": "tasks/code/_adapters/MCC_SAR.py", "dataset": "SAR-VSA", "status": "supplementary", "needs": ["images"]}
+  },
+  "CAP_RGB": {
+    "ucm-cider": {"script": "tasks/code/_adapters/CAP.py", "dataset": "UCM", "status": "supplementary", "needs": ["images", "annotations"], "note": "Computes CIDEr, not the current manuscript RGB ReconScore."},
+    "sydney": {"status": "needs_source", "reason": "The Sydney adapter and ReconScore evaluation used by the current paper are absent."},
+    "rsieval": {"status": "needs_source", "reason": "The RSIEval adapter and ReconScore evaluation used by the current paper are absent."},
+    "ucm": {"status": "needs_source", "reason": "The current paper reports ReconScore for UCM; existing CAP.py only computes CIDEr."}
+  },
+  "CAP_SAR": {
+    "sarlang": {"script": "tasks/code/_adapters/CAP_SARLANG.py", "dataset": "SARLANG", "status": "available", "needs": ["images", "annotations"]},
+    "fusarcap": {"script": "tasks/code/_adapters/CAP_FUSARCAP.py", "dataset": "FUSARCAP", "status": "supplementary", "needs": ["images", "annotations"]}
+  },
+  "CNT_RGB": {
+    "dior": {"script": "tasks/code/_adapters/CNT.py", "dataset": "DIOR", "status": "available", "needs": ["images", "annotations"]},
+    "dotav2": {"script": "tasks/code/_adapters/CNT.py", "dataset": "DOTA", "status": "available", "needs": ["images", "annotations"]}
+  },
+  "CNT_SAR": {
+    "sardet100k": {"script": "tasks/code/_adapters/CNT.py", "dataset": "SARDet", "status": "available", "needs": ["images", "annotations"]}
+  }
+}

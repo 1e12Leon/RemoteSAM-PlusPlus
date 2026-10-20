@@ -85,7 +85,11 @@ class DOTA_style(torch.utils.data.Dataset):
 
     def load_data(self):
 
-        image_list = os.listdir(self.image_path)
+        image_exts = ('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp')
+        image_list = [
+            image_name for image_name in os.listdir(self.image_path)
+            if image_name.lower().endswith(image_exts)
+        ]
         image2groundtruth = {}
 
         for image_name in image_list:

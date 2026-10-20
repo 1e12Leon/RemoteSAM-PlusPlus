@@ -1,6 +1,6 @@
-from .CNT import DIOR_CNT, DOTA_CNT
+from .CNT import DIOR_CNT, DOTA_CNT, SARDet_CNT
 from .VG import RSVG_VG, SARVG_VG
 from .DET import DIOR_DET, SARDet_DET, ISAID_DET, DOTAv2_DET, DOTAv1_DET
 from .MLC import DIOR_MLC, DOTAv2_MLC
-from .MCC import UCM_MCC, AID_MCC
-from .CAP import UCM_CAP
+from .MCC import UCM_MCC, AID_MCC, NWPU_MCC, PatternNet_MCC
+from .CAP import UCM_CAP, SARLANG_CAP, FUSARCAP_CAP

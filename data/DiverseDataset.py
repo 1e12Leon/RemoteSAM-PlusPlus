@@ -10,13 +10,16 @@ def DiverseDataset(args, image_transforms=None, max_tokens=20):
     assert task in ['DET', 'CNT', 'MLC', 'MCC', 'CAP', 'VG'], "task must be in ['DET', 'CNT', 'MLC', 'MCC', 'CAP', 'VG'], but got {}".format(task)
 
     if task == 'CNT':
-        assert dataset in ['DIOR', 'DOTA'], "dataset must be in ['DIOR', 'DOTA'], but got {}".format(dataset)
+        assert dataset in ['DIOR', 'DOTA', 'SARDet'], "dataset must be in ['DIOR', 'DOTA', 'SARDet'], but got {}".format(dataset)
         if dataset == 'DIOR':
             # foo := classname
             return DIOR_CNT(args, max_tokens=max_tokens)
         elif dataset == 'DOTA':
             # foo := classname
             return DOTA_CNT(args, max_tokens=max_tokens)
+        elif dataset == 'SARDet':
+            # foo := classname
+            return SARDet_CNT(args, max_tokens=max_tokens)
 
     elif task == 'VG':
         assert dataset in ['RSVG', 'SARVG'], "dataset must be in ['RSVG', 'SARVG'], but got {}".format(dataset)
@@ -47,13 +50,21 @@ def DiverseDataset(args, image_transforms=None, max_tokens=20):
             return DOTAv2_MLC(args, max_tokens=max_tokens)
 
     elif task == 'MCC':
-        assert dataset in ['UCM', 'AID'], "dataset must be in ['UCM', 'AID'], but got {}".format(dataset)
+        assert dataset in ['UCM', 'AID', 'NWPU', 'PatternNet'], "dataset must be in ['UCM', 'AID', 'NWPU', 'PatternNet'], but got {}".format(dataset)
         if dataset == 'UCM':
             return UCM_MCC(args, max_tokens=max_tokens)
         if dataset == 'AID':
             return AID_MCC(args, max_tokens=max_tokens)
+        if dataset == 'NWPU':
+            return NWPU_MCC(args, max_tokens=max_tokens)
+        if dataset == 'PatternNet':
+            return PatternNet_MCC(args, max_tokens=max_tokens)
 
     elif task == 'CAP':
-        assert dataset in ['UCM'], "dataset must be in ['UCM'], but got {}".format(dataset)
+        assert dataset in ['UCM', 'SARLANG', 'FUSARCAP'], "dataset must be in ['UCM', 'SARLANG', 'FUSARCAP'], but got {}".format(dataset)
         if dataset == 'UCM':
             return UCM_CAP(args, max_tokens=max_tokens)
+        elif dataset == 'SARLANG':
+            return SARLANG_CAP(args, max_tokens=max_tokens)
+        elif dataset == 'FUSARCAP':
+            return FUSARCAP_CAP(args, max_tokens=max_tokens)
