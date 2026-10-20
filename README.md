@@ -156,11 +156,3 @@ bash tasks/SEG.sh --modal sar --dataset whu \
 ```
 
 Use `python tasks/run.py --list` to list supported configurations, or `bash tasks/REF.sh --help` for arguments. The corresponding Python entry points are in `tasks/code/eval/`. Add `--epoc` for DET, CNT, or CAP when required.
-
-## Acknowledge
-
-This project builds on [RemoteSAM](https://github.com/1e12Leon/RemoteSAM) and its RMSIN/LAVT-based framework. We thank the authors of DINOv3, GTE-ModernBERT, and DirectSAM for making their work available.
-
-## Contact
-
-Please contact Fan Liu at fanliu@hhu.edu.cn.
