@@ -1,8 +1,6 @@
 <div align="center">
 
-# RemoteSAM++: A Mask-Centered Foundation Model for Multi-modal Earth Observation
-
-Liang Yao · Fan Liu · Junjie Zhou · Chuanyi Zhang · Ziyun Chen · Shimin Di
+# RemoteSAM++
 
 </div>
 
